@@ -1,6 +1,6 @@
 # AWS Agentic Spock
 
-Spock is a voice-first portfolio experience built with Amazon Connect and Agentic CX Designer. A prospective client can describe a business problem and hear an approach tailored to it. A recruiter can discuss a hiring need and hear how Edward’s background fits Principal CX Architect responsibilities. Curious callers can explore the same projects in their own words.
+Spock is a voice-first portfolio experience built with Amazon Connect and Agentic CX Designer. A prospective client can describe a business problem and hear an approach tailored to it. A recruiter can discuss what the team needs and hear how Edward’s CX architecture experience fits. Curious callers can explore the same projects in their own words.
 
 ## Caller experiences
 
@@ -54,7 +54,7 @@ Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **A
 | Start with | Follow up with | What to verify |
 | --- | --- | --- |
 | “I’m a potential client. We miss calls after hours, and following up with leads takes too long.” | “Actually, most of our inquiries come through the website. We still want customers to reach a live person when it’s urgent.” | Spock pivots to website chat, explains how leads get logged and followed up, and describes the urgent handoff and fallback. It asks one question and relates Maya’s phone workflow where relevant. |
-| “I’m a recruiter.” | “What about CX?” | Spock asks what the role needs to own, explains Edward’s fit for Principal CX Architect responsibilities, and offers two CX portfolio samples without waiting for a link request. |
+| “I’m a recruiter.” | “What about CX?” | Spock asks what CX problem the team needs to solve, explains what Edward can own, and offers two portfolio samples when delivery is enabled. |
 | “What about his work expertise?” | “Yes, email me the portfolio samples.” | Spock leads with skills and credentials, asks for the destination, reads it back, and waits for confirmation before calling `SpockSendRecruiterLinks`. Test a corrected address and a declined confirmation as well. |
 | “Can you send the book and Alexa app links?” | Choose an enabled channel and confirm a test destination. | Spock sends the requested book and app links. Check the Debugger for provider acceptance with a receipt ID, then verify actual receipt in your inbox or on your phone. |
 | “I’m hiring someone to modernize our Amazon Connect setup.” | “Actually, the role is mostly data engineering.” | Spock shifts from Enterprise Connect to AncestorIQ and explains a design choice from the new example. |

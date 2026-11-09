@@ -241,14 +241,14 @@ const paths = [
     intent: 'Use when the caller is hiring, recruiting, evaluating a candidate, discussing a job, or asks about Edward Thornton for a role.',
     refinedIntent: 'Use for recruiter questions about Edward Thornton, Principal CX Architect fit, experience, qualifications, or portfolio.',
     guidance: [
-      'Lead with Edward’s fit for Principal CX Architect responsibilities across AWS and Google Cloud. Explain what he can own and what makes him credible. Speak about Edward in the third person and distinguish role fit from a current job title or employer.',
-      'If someone just says they are a recruiter, open with “Edward is focused on Principal CX Architect roles, with hands-on work across Amazon Connect and Google Cloud. What would you need him to own on your team?” If they have already described the role, answer or ask the most relevant question without repeating discovery.',
+      'Use principal-level CX architecture as background for the conversation. Show Edward’s judgment and scope through what he can own, from understanding the customer journey to designing, implementing, and operating the contact center. Use a job title only if the caller asks about one or it helps answer a specific question they raised. Speak about Edward in the third person and distinguish role fit from employment history.',
+      'If someone just says they are a recruiter, ask “What’s the main CX problem you’d want Edward to take ownership of?” If they already described the role or problem, respond to it directly. Keep the exchange conversational and avoid a rehearsed introduction or a menu of roles.',
       'Ask one specific question about their hiring need, such as the CX problem to solve, the platform they use, or what the architect should own. Use the caller’s answer to tailor the next turn. A direct question about Edward’s qualifications gets a direct answer before any discovery or offer.',
     ],
     extraTools: [recruiterProfile],
     refinements: [
       'Use SpockRecruiterCxQualifications to answer questions about CX, work expertise, credentials, or why hire Edward. Lead with the responsibility he can own, then name one or two grounded qualifications. For a broad CX question, talk about contact center architecture, conversational self-service, routing, handoffs, secure integrations, and his cross-cloud depth. Lead with CX architecture instead of a menu of role categories.',
-      'A concise CX answer can say “Edward is a strong fit for a Principal CX Architect role. He brings the architecture and hands-on implementation together, from Amazon Connect routing to secure conversational AI on Google Cloud, and holds the Google Cloud Professional Cloud Architect certification.” Tailor the answer to the responsibility the recruiter cares about.',
+      'For a broad CX question, one way to answer is “Edward brings the architecture and implementation together. He can work through what to automate, when a customer should reach an agent, and how to connect those pieces securely across AWS and Google Cloud.” If the hiring need is unclear, ask a focused question about what their team wants to improve. If it is clear, relate his actual experience or credentials to it and offer a relevant sample when delivery is available.',
       'Use projects as evidence for a specific skill or design decision, especially when asked for an example. Use SpockEnterpriseConnectCase for Amazon Connect, SpockMayaCase for Dialogflow CX or screened phone handoffs, and SpockAncestorIQCase for data engineering. Use the qualifications profile for platform engineering, cloud security, and credentials. Say public project names when useful and keep internal tool names private. Maya is a phone workflow with SMS follow-up. Describe independent portfolio work accurately and avoid claims about employment history, delivery guarantees, or unverified project scope.',
       'Discuss the Alexa app or Voice Applications for Beginners only when the caller asks about them or about Edward’s voice development background. The Alexa app suggests rhymes aloud, and the book teaches first-time developers to build voice apps. Keep those separate from the contact center and live handoff work. Refer to the Alexa app by its function and omit publisher branding.',
       'If the recruiter changes the role or priority, use the new information without restarting. In chat, share the requested approved public links. On a call, offer the available way to share links and avoid reading URLs aloud.',
@@ -373,6 +373,9 @@ const priorRecruiterSignatures = new Set([
   '090e0440eccdad9bfe49817b3351d61c651ce712bd637380ca5c1e97809b4e8e', // Conversation only
   'cac6358c2df75c151ef3ae9324fd407af1840059d21dec75a127c8d11637fa75', // Email delivery
   'b265373dde57116903f4ece187d49a91acdc08a70033e95f47a214ae119e0a9e', // Email and SMS delivery
+  'd589087a9d83e142523ae484ec695456dbcb458c901e3ab494e8aae2ca076371', // First CX-focused conversation
+  '805e099964a001db27a06af3d7530768780eff868a7eacf45a1f870bbd17b3db', // First CX-focused email build
+  '9d99cfa7f27d6452a41c9b0eac2dc0878e0b13674d6967d51fb5f882765efd76', // First CX-focused email and SMS build
 ]);
 
 function inspectFlow(path, flow, spec, supported) {
