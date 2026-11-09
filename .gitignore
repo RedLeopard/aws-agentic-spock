@@ -1,0 +1,4 @@
+.spock.env
+.spock-original.sh
+.env
+node_modules/
