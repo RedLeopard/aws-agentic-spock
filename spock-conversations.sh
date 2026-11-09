@@ -216,6 +216,11 @@ const emailDeliveryGuidance = [
   deliveryScope,
 ];
 
+const recruiterIntro = 'Edward Thornton is a hands-on cloud solutions architect who takes systems from design through deployment on AWS and Google Cloud. ' +
+  'He’s migrated legacy contact centers to AWS and designed routing for centers supporting 300 to 500 agents. ' +
+  'He builds with Amazon Connect and Dialogflow CX, and his broader cloud work covers secure APIs and data integrations, Terraform, Kubernetes, automated deployments, and monitoring. ' +
+  'He holds Google Cloud’s Professional Cloud Architect certification. What would you need him to deliver first?';
+
 const paths = [
   {
     id: 'PotentialClient',
@@ -243,7 +248,8 @@ const paths = [
     guidance: [
       'Use principal-level CX architecture as background for the conversation. Show Edward’s judgment and scope through what he can own, from understanding the customer journey to designing, implementing, and operating the contact center. Use a job title only if the caller asks about one or it helps answer a specific question they raised. Speak about Edward in the third person and distinguish role fit from employment history.',
       'Edward supplied two facts about his professional work. He designed routing for contact centers supporting 300 to 500 agents. He also migrated legacy contact centers to AWS. Keep the agent range tied to routing and discuss the migrations separately. Use public case studies to illustrate technical decisions without attributing that scale or migration history to the portfolio builds. Avoid inferring staff management, concurrent agent counts, or migration details.',
-      'Give the recruiter a reason to keep listening before asking for details. If they only say they are a recruiter, open naturally along these lines. “Edward has designed routing for contact centers supporting 300 to 500 agents. He’s also migrated legacy contact centers to AWS. What would you need him to deliver first?” If they already told you what they are hiring for, lead with the part of his experience that matters to that hire.',
+      'When a caller introduces themselves as a recruiter without a specific question, give this complete introduction in one turn, then wait for their answer. The usual short reply limit applies to follow-up turns. If they already asked a specific question, answer it directly and use the relevant part of the introduction.',
+      recruiterIntro,
       'Ask one question the recruiter can answer about the work, such as what the hire needs to deliver first or where a handoff breaks down today. Use the answer to choose what to emphasize next. Answer direct questions about Edward’s qualifications before asking for more detail.',
     ],
     extraTools: [recruiterProfile],
@@ -383,6 +389,9 @@ const priorRecruiterSignatures = new Set([
   '8c7fc4183abec0011c70b5e38e89116b1cd17c3144509bf9fb449284e887a040', // Proof-first recruiter opener
   '22bd3143ffedc69b1d257f2fc32c5046867238b864699e5b885cfad8349d05d4', // Proof-first opener with email
   '7676cb7a28ecf11534ce67d5cfde69365b81493c2efdcfc3bbda16213255b095', // Proof-first opener with email and SMS
+  '3f1591c1ab2452423faa5a23e1571d60ea207f50f9f108ceb618d4699747b5b3', // Scale and migration opener
+  '9a4038aaf6ee5c0475320daacb674f34f4d5f50a5703b864de93f5ad06eb7ecf', // Scale and migration opener with email
+  'dc2f3bba7bb474c3496dc1e99adc85a150b571494193b4cd5f45a41b30ecec06', // Scale and migration opener with email and SMS
 ]);
 
 function inspectFlow(path, flow, spec, supported) {
