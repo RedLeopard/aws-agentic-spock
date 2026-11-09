@@ -1,13 +1,13 @@
 # AWS Agentic Spock
 
-Spock is a voice-first portfolio experience built with Amazon Connect and Agentic CX Designer. A prospective client can describe a business problem and hear an approach tailored to it. A recruiter can describe the work they’re hiring for and hear a matching project and the engineering decision behind it. Curious callers can explore the same projects in their own words.
+Spock is a voice-first portfolio experience built with Amazon Connect and Agentic CX Designer. A prospective client can describe a business problem and hear an approach tailored to it. A recruiter can ask about Edward’s qualifications or describe a role and hear the engineering decision behind a matching project. Curious callers can explore the same projects in their own words.
 
 ## Caller experiences
 
 | Path | What Spock does |
 | --- | --- |
 | Potential client | Asks about the caller’s workflow, recommends a practical first step, and explains the benefit. Website chatbots, AI phone assistants, live-agent handoffs, automation, and full contact centers are all possible paths. |
-| Recruiter | Asks what the hire would own, looks up a relevant project, and explains a specific design choice. It adapts if the recruiter changes priorities. |
+| Recruiter | Answers direct questions about Edward’s qualifications and matches the role to a project or skill. It can explain his years of voice and chat work, the Alexa skill he shipped, and the book he wrote on voice development. |
 | Live demo | Leads with a short choice of examples and follows the caller’s questions. A caller can switch topics or turn the walkthrough into a conversation about a real need. |
 
 Each path can call three read-only Designer data requests. They contain public project facts and limits on what Spock can claim about each build.
@@ -17,6 +17,8 @@ Each path can call three read-only Designer data requests. They contain public p
 | [Maya · Dialogflow CX Virtual Agent](https://github.com/RedLeopard/dialogflow-cx-virtual-agent) | Voice intake, confirmed press-1 transfer, and booking-link and owner-alert texts. |
 | [Project Enterprise Connect](https://github.com/RedLeopard/project-enterprise-connect) | Amazon Connect queue routing, real-time metrics, and call recordings in S3. |
 | [AncestorIQ](https://github.com/RedLeopard/AncestorIQ) | A FastAPI search application on Cloud Run, backed by a BigQuery index of historical records. |
+
+The recruiter route also uses a public qualifications profile. It includes [Voice Applications for Beginners](https://a.co/d/0ftqIws5), the [Street Genius Rhyming Words Alexa skill](https://www.amazon.com/Street-Genius-Rhyming-Words/dp/B09PNKJH5C), Loop Social’s real-time messaging, [Energy Transmission](https://hireedwardthornton.click/energy-transmission.html) for platform engineering, Maya’s authenticated webhook for security, and Edward’s cloud credentials and technical writing.
 
 ## Designer checkpoint
 
@@ -46,7 +48,9 @@ Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **A
 | Start with | Follow up with | What to verify |
 | --- | --- | --- |
 | “I’m a potential client. We miss calls after hours, and following up with leads takes too long.” | “Actually, most of our inquiries come through the website. We still want customers to reach a live person when it’s urgent.” | Spock pivots to website chat, explains how leads get logged and followed up, and describes the urgent handoff and fallback. It asks one question and relates Maya’s phone workflow where relevant. |
+| “Why should we hire Edward?” | “What did his Alexa skill do? Can you share links to that and his book?” | Spock answers before asking about the role, uses `SpockRecruiterProfile`, and names the book and Alexa skill. In Test chat it shares both public links when asked. |
 | “I’m hiring someone to modernize our Amazon Connect setup.” | “Actually, the role is mostly data engineering.” | Spock shifts from Enterprise Connect to AncestorIQ and explains a design choice from the new example. |
+| “What has Edward built with Kubernetes and CI/CD?” | “How did he secure a conversational AI backend?” | Spock describes Energy Transmission’s deployment and monitoring and then explains Maya’s authenticated webhook and secret handling. |
 | “I’m just here to see what you can do.” | “How was this voice assistant built?” | Spock guides the caller through the experience and explains the role of Amazon Connect and Designer. |
 
 ## Messaging and launch

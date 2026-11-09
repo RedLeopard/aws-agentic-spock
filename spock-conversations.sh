@@ -91,6 +91,28 @@ const cases = [
   },
 ];
 
+const recruiterProfile = {
+  id: 'SpockRecruiterProfile',
+  useFor: 'Use for Edward Thornton’s qualifications, hiring fit, voice and chat experience, book, Alexa skill, credentials, or cloud engineering background.',
+  evidence: {
+    name: 'Edward Thornton',
+    voiceAndChat: 'Edward has built voice and chat experiences for years. He took independent applications from idea through launch, including Loop Social, a Flutter app with real-time messaging and community alerts.',
+    book: 'Edward wrote Voice Applications for Beginners: A Genius Guide to Developing Skills for Alexa and Google Assistant. The book teaches first-time developers how to build voice apps.',
+    bookLink: 'https://a.co/d/0ftqIws5',
+    alexaSkill: 'Edward built Street Genius Rhyming Words, a published Alexa skill that lets people ask for rhymes by voice. He built it with Python and Alexa Presentation Language.',
+    alexaSkillLink: 'https://www.amazon.com/Street-Genius-Rhyming-Words/dp/B09PNKJH5C',
+    alexaLaunchLink: 'https://alexa-skills.amazon.com/apis/custom/skills/amzn1.ask.skill.a6e125ca-cd96-4bc4-9958-86c0a399c454/launch',
+    cloudEngineering: 'Edward builds across AWS and Google Cloud. His portfolio shows Terraform, VPC and IAM, Docker, Kubernetes including EKS and GKE, CI/CD, and observability.',
+    platformProject: 'For Energy Transmission, Edward containerized a .NET app and carried the Kubernetes deployment approach from OpenShift to Amazon EKS, where he completed the Jenkins pipeline and added Prometheus and Grafana monitoring.',
+    platformLink: 'https://hireedwardthornton.click/energy-transmission.html',
+    securityExample: 'In Maya, Edward documented using service-agent ID tokens to invoke a private Cloud Run webhook and Secret Manager to supply the Twilio credential at runtime.',
+    securityLink: 'https://hireedwardthornton.click/dialogflow-cx.html',
+    credentials: 'Edward is a Google Cloud Professional Cloud Architect. His portfolio also documents training in conversational AI on Vertex AI and Dialogflow CX, and course completion for Amazon Connect Agentic CX Designer.',
+    technicalCommunication: 'Edward has authored five technical books, presented on Flutter at Strange Loop, and founded Black Tech STL, an initiative focused on tech education and mentorship.',
+    portfolioLink: 'https://hireedwardthornton.click/',
+  },
+};
+
 const shared = [
   'You are Spock, the AI guide for this portfolio experience. Speak naturally in one to three short sentences at a time. Ask one question at a time.',
   'Use "we can build" when discussing possible solutions. Possible work includes website chatbots, AI phone assistants, live-agent handoffs that carry context, workflow automation such as lead intake and follow-up, cloud applications and data workflows, and full contact-center design. Present these as options tailored to the caller.',
@@ -125,10 +147,19 @@ const paths = [
     id: 'Recruiter',
     originalReply: 'Got it. You’re calling about hiring. This is Spock’s recruiter path.',
     intent: 'Use when the caller is hiring, recruiting, evaluating a candidate, discussing a job, or asks about Edward Thornton for a role.',
+    refinedIntent: 'Use for hiring or job discussions and direct questions about Edward Thornton’s qualifications, professional experience, credentials, books, or Alexa skill.',
     guidance: [
       'Ask what the person in the role would be responsible for. If the caller already gave that information, ask which requirement matters most or immediately show a matching case when the priority is clear.',
       'Connect a real design decision to the requirement. For example, discuss the working queue before transfer for Amazon Connect, screened acceptance and recovery for voice automation, or separating raw data from the serving index for data engineering.',
       'If they change the role or priority, update the example and explain the new match. Avoid guessing about availability, compensation, or credentials.',
+    ],
+    extraTools: [recruiterProfile],
+    refinements: [
+      'When asked about Edward, his qualifications, why to hire him, his voice and chat background, his book, his Alexa skill, or his credentials, call SpockRecruiterProfile and answer the question first, even when the role is unknown. Speak about Edward in the third person. Ask about the role only if it would help tailor the next answer.',
+      'For a broad hiring-fit or voice and chat answer, explain that Edward has built voice and chat experiences for years. Name both Voice Applications for Beginners and Street Genius Rhyming Words. Connect the book to his ability to teach technical ideas and the Alexa skill to his ability to ship a voice product. Use Loop Social when asked for a chat or messaging example.',
+      'When the role is known, explain how Edward’s experience fits the responsibility and ground it in a design decision. Use SpockEnterpriseConnectCase for Amazon Connect or contact center routing, SpockMayaCase for conversational AI or live handoffs, and SpockAncestorIQCase for data engineering. Call SpockRecruiterProfile for platform or DevOps work and use Energy Transmission. For security, use its private webhook and runtime secret example. If the caller corrects the role, use the new evidence without restarting the conversation.',
+      'For a full qualifications overview, cover cross-cloud architecture and operations, relevant credentials, and technical communication alongside voice and chat. Prioritize the role-specific evidence in focused answers. Describe portfolio projects as independent builds and keep claims grounded in the tools.',
+      'When asked for links in chat, use the profile’s bookLink and alexaSkillLink for the requested items. Use alexaLaunchLink if asked how to try the skill. On a call, give the title and say it is on Edward’s portfolio at hire Edward Thornton dot click.',
     ],
   },
   {
@@ -143,15 +174,15 @@ const paths = [
   },
 ];
 
-const responseSchema = {
+const responseSchema = (evidence) => ({
   type: 'object',
   properties: Object.fromEntries(
-    ['name', 'delivered', 'decision', 'stack', 'verification', 'link'].map((name) => [name, { type: 'string' }]),
+    Object.keys(evidence).map((name) => [name, { type: 'string' }]),
   ),
-};
+});
 const toolDescription = (entry) => 'Spock portfolio v1. ' + entry.useFor;
 
-async function inspectCase(entry) {
+async function inspectDataRequest(entry) {
   let existing;
   try {
     existing = await send(GetDataRequestCommand, { dataRequestIdentifier: entry.id });
@@ -176,7 +207,7 @@ function nodeId(flowId, label) {
     '8' + hash.slice(17, 20), hash.slice(20, 32)].join('-');
 }
 
-function flowSpec(path, refinements = []) {
+function flowSpec(path, refinements = [], extraTools = []) {
   const nodes = {};
   const id = (label) => nodeId(path.id, label);
   const link = (label, name = 'next', conditions = []) => ({ nodeId: id(label), name, conditions });
@@ -208,7 +239,9 @@ function flowSpec(path, refinements = []) {
         maxSteps: 10,
         maxTokens: 2048,
         temperature: 0.3,
-        tools: cases.map(({ id: dataRequestId }) => ({ type: 'dataRequest', dataRequest: { dataRequestId, payload: {} } })),
+        tools: [...cases, ...extraTools].map(({ id: dataRequestId }) => ({
+          type: 'dataRequest', dataRequest: { dataRequestId, payload: {} },
+        })),
         exitConditions: [{ name: 'done', prompt: 'The caller indicates that they are finished and all requested answers have been delivered.' }],
       },
     },
@@ -217,7 +250,8 @@ function flowSpec(path, refinements = []) {
   say('failure', 540, "I couldn't finish that walkthrough. You can find the projects at hire Edward Thornton dot click.");
   add('end', 'terminate', 300, 670, { childNodes: [] });
   return {
-    flowIdentifier: path.id, nodes, aiDescription: path.intent, untrained: false,
+    flowIdentifier: path.id, nodes, untrained: false,
+    aiDescription: refinements.length && path.refinedIntent ? path.refinedIntent : path.intent,
     description: 'Spock portfolio conversation v' + (refinements.length ? '2: ' : '1: ') + path.id,
   };
 }
@@ -229,7 +263,7 @@ function matchesJourney(flow, spec) {
   return flow.description === spec.description && flow.aiDescription === spec.aiDescription &&
     journey?.prompt === desired.prompt && journey.modelType === desired.modelType &&
     JSON.stringify(journey.tools?.map((tool) => tool.dataRequest?.dataRequestId)) ===
-      JSON.stringify(cases.map(({ id: dataRequestId }) => dataRequestId));
+      JSON.stringify(desired.tools.map((tool) => tool.dataRequest.dataRequestId));
 }
 
 function inspectFlow(path, flow, spec, originalSpec) {
@@ -247,9 +281,13 @@ function inspectFlow(path, flow, spec, originalSpec) {
 function refineJourney(flow, spec) {
   const journeyId = nodeId(spec.flowIdentifier, 'portfolioJourney');
   const node = flow.nodes[journeyId];
+  const current = node.metadata.generativeJourney;
+  const desired = spec.nodes[journeyId].metadata.generativeJourney;
+  const existingTools = new Map(current.tools.map((tool) => [tool.dataRequest.dataRequestId, tool]));
   return {
     flowIdentifier: spec.flowIdentifier,
     description: spec.description,
+    aiDescription: spec.aiDescription,
     nodes: {
       ...flow.nodes,
       [journeyId]: {
@@ -257,8 +295,9 @@ function refineJourney(flow, spec) {
         metadata: {
           ...node.metadata,
           generativeJourney: {
-            ...node.metadata.generativeJourney,
-            prompt: spec.nodes[journeyId].metadata.generativeJourney.prompt,
+            ...current,
+            prompt: desired.prompt,
+            tools: desired.tools.map((tool) => existingTools.get(tool.dataRequest.dataRequestId) ?? tool),
           },
         },
       },
@@ -295,25 +334,26 @@ try {
   const updates = [];
   for (const path of paths) {
     const originalSpec = flowSpec(path);
-    const spec = path.refinements ? flowSpec(path, path.refinements) : originalSpec;
+    const spec = path.refinements ? flowSpec(path, path.refinements, path.extraTools) : originalSpec;
     const original = await send(GetFlowCommand, { flowIdentifier: path.id });
     updates.push({ spec, original, state: inspectFlow(path, original, spec, originalSpec) });
   }
-  const presentCases = new Set();
-  for (const entry of cases) {
-    if (await inspectCase(entry)) presentCases.add(entry.id);
+  const dataRequests = [...cases, recruiterProfile];
+  const presentRequests = new Set();
+  for (const entry of dataRequests) {
+    if (await inspectDataRequest(entry)) presentRequests.add(entry.id);
   }
 
   phase = 'Adding verified portfolio facts';
-  for (const entry of cases) {
-    if (!presentCases.has(entry.id)) {
+  for (const entry of dataRequests) {
+    if (!presentRequests.has(entry.id)) {
       await send(CreateDataRequestCommand, {
         dataRequestId: entry.id,
         type: 'object',
         description: toolDescription(entry),
         webhook: { implementation: 'inline-static', code: JSON.stringify(entry.evidence), sendContext: false },
         requestSchema: { type: 'object', properties: {} },
-        responseSchema,
+        responseSchema: responseSchema(entry.evidence),
       });
     }
     console.log('Ready ' + entry.id);
