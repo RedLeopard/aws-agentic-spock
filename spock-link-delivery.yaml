@@ -122,7 +122,14 @@ Resources:
           DEDUP_SECONDS = 600
           BOOK = "Voice Applications for Beginners: https://www.amazon.com/dp/B09SNKVGSR"
           ALEXA = "Alexa app: https://www.amazon.com/dp/B09PNKJH5C"
-          LINKS = {"book": BOOK, "alexa": ALEXA, "both": BOOK + "\n" + ALEXA}
+          LINKS = {
+              "cx_samples": "AWS: https://hireedwardthornton.click/enterprise-connect.html\n"
+                            "GCP: https://hireedwardthornton.click/dialogflow-cx.html",
+              "portfolio": "Portfolio: https://hireedwardthornton.click/",
+              "book": BOOK,
+              "alexa": ALEXA,
+              "both": BOOK + "\n" + ALEXA,
+          }
           EMAIL = re.compile(
               r"[A-Za-z0-9!#$%&'*+/=?^_\x60{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_\x60{|}~-]+)*@"
               r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}"
@@ -135,11 +142,13 @@ Resources:
               return SECRETS.get_secret_value(SecretId=os.environ["WEBHOOK_KEY_ARN"])["SecretString"].encode()
 
 
-          def respond(status, code=200):
+          def respond(status, code=200, receipt_id=""):
               return {
                   "statusCode": code,
-                  "headers": {"content-type": "application/json", "cache-control": "no-store"},
-                  "body": json.dumps({"status": status}),
+                  "headers": {
+                      "content-type": "application/json", "cache-control": "no-store", "x-spock-links-version": "2",
+                  },
+                  "body": json.dumps({"status": status, "receiptId": receipt_id}),
               }
 
 
@@ -179,15 +188,23 @@ Resources:
               except DB.exceptions.ConditionalCheckFailedException:
                   item = DB.get_item(TableName=TABLE, Key=key, ConsistentRead=True).get("Item", {})
                   previous = item.get("outcome", {}).get("S")
-                  return "already_accepted" if previous == "accepted" else previous or "unconfirmed"
+                  if previous == "accepted":
+                      return "already_accepted", item.get("receiptId", {}).get("S", "")
+                  return previous or "unconfirmed", ""
 
+              receipt_id = ""
               try:
                   receipt = send_links(channel, destination, LINKS[selection])
-                  outcome = "accepted" if receipt.get("MessageId") else "unconfirmed"
+                  receipt_id = receipt.get("MessageId") or ""
+                  outcome = "accepted" if receipt_id else "unconfirmed"
+                  print(f"Spock {channel} provider outcome={outcome} receiptId={receipt_id}.")
               except ClientError as error:
                   status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
                   outcome = "rejected" if 400 <= status < 500 else "unconfirmed"
-                  code = error.response.get("Error", {}).get("Code", "Unknown")
+                  provider_error = error.response.get("Error", {})
+                  code = provider_error.get("Code", "Unknown")
+                  if channel == "email" and code == "MessageRejected" and "not verified" in provider_error.get("Message", "").lower():
+                      outcome = "identity_not_verified"
                   print(f"Spock {channel} provider outcome={outcome} awsCode={code}.")
               except BotoCoreError:
                   print(f"Spock {channel} provider response was unconfirmed.")
@@ -195,10 +212,10 @@ Resources:
               DB.update_item(
                   TableName=TABLE,
                   Key=key,
-                  UpdateExpression="SET outcome = :outcome",
-                  ExpressionAttributeValues={":outcome": {"S": outcome}},
+                  UpdateExpression="SET outcome = :outcome, receiptId = :receipt",
+                  ExpressionAttributeValues={":outcome": {"S": outcome}, ":receipt": {"S": receipt_id}},
               )
-              return outcome
+              return outcome, receipt_id
 
 
           def handler(event, _context):
@@ -233,7 +250,8 @@ Resources:
                       valid = False
                   if not valid:
                       return respond("invalid_destination")
-                  return respond(deliver(channel, destination, selection, secret))
+                  status, receipt_id = deliver(channel, destination, selection, secret)
+                  return respond(status, receipt_id=receipt_id)
               except ValueError:
                   return respond("invalid_request")
               except (BotoCoreError, ClientError):

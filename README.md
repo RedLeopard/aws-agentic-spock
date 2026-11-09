@@ -1,13 +1,13 @@
 # AWS Agentic Spock
 
-Spock is a voice-first portfolio experience built with Amazon Connect and Agentic CX Designer. A prospective client can describe a business problem and hear an approach tailored to it. A recruiter can ask about Edward’s qualifications or describe a role and hear the engineering decision behind a matching project. Curious callers can explore the same projects in their own words.
+Spock is a voice-first portfolio experience built with Amazon Connect and Agentic CX Designer. A prospective client can describe a business problem and hear an approach tailored to it. A recruiter can discuss a hiring need and hear how Edward’s background fits Principal CX Architect responsibilities. Curious callers can explore the same projects in their own words.
 
 ## Caller experiences
 
 | Path | What Spock does |
 | --- | --- |
 | Potential client | Asks about the caller’s workflow, recommends a practical first step, and explains the benefit. Website chatbots, AI phone assistants, live-agent handoffs, automation, and full contact centers are all possible paths. |
-| Recruiter | Answers direct questions about Edward’s qualifications and matches the role to a project. It can explain his years of voice and chat work and describe how his Alexa app suggests rhymes. With delivery enabled, it can send the app and book links by text or email. |
+| Recruiter | Asks what the architect needs to own and leads with Edward’s contact center architecture, conversational AI, cloud integration, and credentials. It offers relevant portfolio samples by email or text when delivery is enabled. |
 | Live demo | Leads with a short choice of examples and follows the caller’s questions. A caller can switch topics or turn the walkthrough into a conversation about a real need. |
 
 Each path can call three read-only Designer data requests. They contain public project facts and limits on what Spock can claim about each build.
@@ -54,15 +54,16 @@ Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **A
 | Start with | Follow up with | What to verify |
 | --- | --- | --- |
 | “I’m a potential client. We miss calls after hours, and following up with leads takes too long.” | “Actually, most of our inquiries come through the website. We still want customers to reach a live person when it’s urgent.” | Spock pivots to website chat, explains how leads get logged and followed up, and describes the urgent handoff and fallback. It asks one question and relates Maya’s phone workflow where relevant. |
-| “Why should we hire Edward for voice and chat?” | “How does his Alexa app work?” | Spock uses `SpockRecruiterQualifications`, explains that people can ask Alexa for rhymes, and connects the app and book to the role. |
-| “Send me both links.” | “Text, please.” In a new test choose email instead. | With link delivery enabled, Spock asks for the selected destination, reads it back, and waits for confirmation before calling `SpockSendRecruiterLinks`. Use your own test inbox and phone and verify receipt separately. |
+| “I’m a recruiter.” | “What about CX?” | Spock asks what the role needs to own, explains Edward’s fit for Principal CX Architect responsibilities, and offers two CX portfolio samples without waiting for a link request. |
+| “What about his work expertise?” | “Yes, email me the portfolio samples.” | Spock leads with skills and credentials, asks for the destination, reads it back, and waits for confirmation before calling `SpockSendRecruiterLinks`. Test a corrected address and a declined confirmation as well. |
+| “Can you send the book and Alexa app links?” | Choose an enabled channel and confirm a test destination. | Spock sends the requested book and app links. Check the Debugger for provider acceptance with a receipt ID, then verify actual receipt in your inbox or on your phone. |
 | “I’m hiring someone to modernize our Amazon Connect setup.” | “Actually, the role is mostly data engineering.” | Spock shifts from Enterprise Connect to AncestorIQ and explains a design choice from the new example. |
 | “What has Edward built with Kubernetes and CI/CD?” | “How did he secure a conversational AI backend?” | Spock describes Energy Transmission’s deployment and monitoring and then explains Maya’s authenticated webhook and secret handling. |
 | “I’m just here to see what you can do.” | “How was this voice assistant built?” | Spock guides the caller through the experience and explains the role of Amazon Connect and Designer. |
 
 ## Send the recruiter links by text or email
 
-Spock sends the book link, the Alexa app link, or both as requested. It asks the caller to choose a channel and reads back the destination before sending. If a caller changes the address, number, or channel, Spock confirms the new choice first. It reports a send after the provider accepts the request.
+Spock offers the Amazon Connect and Dialogflow CX case studies for CX hiring questions. It can also send the full portfolio or the book and Alexa app links on request. It reads back the destination and what it will send, then waits for confirmation. If a caller changes the address, number, or channel, Spock confirms the new choice first. The send tool returns a status and a provider receipt ID on acceptance. Confirm actual receipt separately.
 
 ### Test email first
 
@@ -96,6 +97,8 @@ Spock sends the book link, the Alexa app link, or both as requested. It asks the
 Either delivery flag provisions [the link delivery stack](spock-link-delivery.yaml), checks the authenticated webhook without sending a message, and attaches the send tool to the recruiter route. For a conversation-only build, run the installer without a flag before enabling delivery. Once enabled, include the flag for the enabled mode or upgrade from email to both channels.
 
 If an AWS administrator provisions the stack separately, upload `spock-link-delivery.yaml` to CloudFormation in Oregon. Use stack name `aws-agentic-spock-link-delivery`, set `SesIdentity` and `SesFromEmail` to match `.spock.env`, and leave `SmsOriginationArn` blank for email-only testing. Add stack tags `Project=aws-agentic-spock` and `Component=link-delivery`, then acknowledge the template's IAM role. After the stack completes, the local AWS profile needs `cloudformation:DescribeStacks` for this stack and `secretsmanager:GetSecretValue` for the secret ARN listed as `WebhookKeyArn` in its Outputs tab. The Designer installer uses those outputs to wire the webhook.
+
+For an existing stack, update it with the current template before building the recruiter flow. The installer checks that the webhook supports portfolio samples and receipts. When debugging email in the SES sandbox, use an address verified in Oregon. In Designer’s Debugger, `identity_not_verified` means SES rejected an unverified identity. `accepted` with a receipt ID means SES accepted the request. For either outcome, the Lambda logs record the provider result without the address.
 
 ```bash
 SPOCK_USE_EXISTING_LINK_STACK=1 bash spock-conversations.sh --with-email-delivery

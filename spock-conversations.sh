@@ -55,6 +55,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import { isDeepStrictEqual } from 'node:util';
 import {
   AgenticCXDesignerClient,
   CreateApplicationBuildCommand,
@@ -126,10 +127,14 @@ const cases = [
 ];
 
 const recruiterProfile = {
-  id: 'SpockRecruiterQualifications',
-  useFor: 'Use for Edward Thornton’s qualifications, hiring fit, voice and chat experience, book, Alexa skill, credentials, or cloud engineering background.',
+  id: 'SpockRecruiterCxQualifications',
+  useFor: 'Use for Edward Thornton and fit for a Principal CX Architect role, including contact center design, conversational AI, cloud integration, credentials, and technical communication.',
   evidence: {
     name: 'Edward Thornton',
+    cxArchitecture: 'Edward designs and builds cloud contact center and conversational AI solutions across AWS and Google Cloud. He connects customer journeys and self-service to routing, live handoffs, secure integrations, and operational visibility.',
+    contactCenter: 'In his Amazon Connect work, Edward designed IVR menus, queue and agent routing, S3 recordings, and real-time operational visibility. He can explain how design choices affect the caller and the agent.',
+    conversationalAI: 'In his Dialogflow CX work, Edward built phone intake with Gemini, authenticated Cloud Run fulfillment, screened live transfers, and SMS follow-up. The verified example is a phone workflow.',
+    deliveryExperience: 'Edward takes solutions from discovery and architecture into implementation and testing. His independent builds show how he brings telephony, AI, APIs, cloud security, and operations together.',
     voiceAndChat: 'Edward has built voice and chat experiences for years. He took independent applications from idea through launch, including Loop Social, a Flutter app with real-time messaging and community alerts.',
     book: 'Edward wrote Voice Applications for Beginners: A Genius Guide to Developing Skills for Alexa and Google Assistant. The book teaches first-time developers how to build voice apps.',
     bookLink: 'https://www.amazon.com/dp/B09SNKVGSR',
@@ -148,10 +153,12 @@ const recruiterProfile = {
 };
 
 const sharingWithoutDelivery = 'If someone wants a case study, give its project title and say they can find the portfolio at hire Edward Thornton dot click. In chat you may provide the public link returned by the tool. Email, texts, bookings, and live transfers are not enabled for this experience. Say so if requested and do not collect an address or phone number.';
+const solutionGuidance = 'Use "we can build" when discussing possible solutions. Possible work includes website chatbots, AI phone assistants, live-agent handoffs that carry context, workflow automation such as lead intake and follow-up, cloud applications and data workflows, and full contact-center design. Present these as options tailored to the caller.';
+const projectGuidance = 'Use the attached case-study tool to support any claim about a completed project. Choose the most relevant example. If the caller asks about a different skill or changes their priority, choose the corresponding case again. Tell them the project name and explain a specific engineering decision in plain English. Offer deeper technical detail when asked.';
 const shared = [
   'You are Spock, the AI guide for this portfolio experience. Speak naturally in one to three short sentences at a time. Ask one question at a time.',
-  'Use "we can build" when discussing possible solutions. Possible work includes website chatbots, AI phone assistants, live-agent handoffs that carry context, workflow automation such as lead intake and follow-up, cloud applications and data workflows, and full contact-center design. Present these as options tailored to the caller.',
-  'Use the attached case-study tool to support any claim about a completed project. Choose the most relevant example. If the caller asks about a different skill or changes their priority, choose the corresponding case again. Tell them the project name and explain a specific engineering decision in plain English. Offer deeper technical detail when asked.',
+  solutionGuidance,
+  projectGuidance,
   'Treat tool verification notes as boundaries. Distinguish what the project delivered, what was tested, and what could be built for this caller. Do not invent metrics, pricing, guarantees, client names, or completed work.',
   'Acknowledge multiple requests, handle them in a sensible order, and return to unfinished requests after a side question. If the caller corrects you, use the corrected information. If their purpose changes, adapt the conversation without replaying the welcome.',
   'If asked how Spock itself works, explain that Amazon Connect handles the phone channel, Agentic CX Designer guides the conversation, and data requests retrieve the published project facts used in this experience.',
@@ -160,40 +167,52 @@ const shared = [
   'Continue until the caller clearly indicates they are finished. Answer any remaining question before using the done exit.',
 ];
 
+const priorLinkToolDescription = 'Send only the requested book or Alexa app links by the caller’s chosen channel after reading back the destination and receiving a clear yes.';
 const linkTool = {
   id: 'SpockSendRecruiterLinks',
-  description: 'Send only the requested book or Alexa app links by the caller’s chosen channel after reading back the destination and receiving a clear yes.',
+  description: 'Send approved portfolio samples or requested book and Alexa app links after readback and explicit confirmation. Use the provider result to report what happened.',
+  prompt: 'Invoke this tool once after the caller confirms the exact destination, channel, and links. Pass the confirmed selection and destination. Treat the returned status and receiptId as the source of truth for this attempt. A send is confirmed only by accepted with a nonempty receiptId. Report provider acceptance without promising inbox delivery. Say you could not confirm the send when the tool is unavailable, fails, or returns no receipt.',
   requestSchema: {
     type: 'object',
     properties: {
       channel: { type: 'string', enum: emailOnly ? ['email'] : ['sms', 'email'], description: 'The single channel the caller chose.' },
       destination: { type: 'string', description: 'The confirmed email address or phone number in +country-code format.' },
-      selection: { type: 'string', enum: ['book', 'alexa', 'both'], description: 'Which public links the caller confirmed.' },
+      selection: {
+        type: 'string', enum: ['cx_samples', 'portfolio', 'book', 'alexa', 'both'],
+        description: 'cx_samples sends the Amazon Connect and Dialogflow CX portfolio examples. portfolio sends the full portfolio. both sends only the book and Alexa app. Use the selection the caller confirmed.',
+      },
       confirmed: { type: 'boolean', description: 'True only after the caller says yes to the channel, links, and destination you read back.' },
     },
     required: ['channel', 'destination', 'selection', 'confirmed'],
   },
   responseSchema: {
     type: 'object',
-    properties: { status: { type: 'string' } },
-    required: ['status'],
+    properties: {
+      status: { type: 'string' },
+      receiptId: { type: 'string', description: 'Provider message ID on acceptance. Empty when acceptance is unknown or the request was rejected.' },
+    },
+    required: ['status', 'receiptId'],
   },
 };
 
-const sendConfirmation = 'Only after that confirmation, call SpockSendRecruiterLinks once for that choice. Send the book, the Alexa app, or both as requested. If the tool returns accepted, say you sent the requested links. If it returns already_accepted, say that request was already sent. In both cases, describe the send without claiming the links arrived.';
-const deliveryScope = 'This delivery tool sends the two public links only. Share other public portfolio links in chat or point voice callers to hire Edward Thornton dot click. For booking or transfer requests, direct callers to the portfolio contact page.';
+const samplesOffer = 'After answering a question about CX fit, expertise, or qualifications, proactively offer relevant portfolio samples once. Use cx_samples for the two CX architecture examples and portfolio for a general or non-CX portfolio request. If the caller asks you to send an email after discussing qualifications, treat it as a request for the relevant samples and ask for the destination. Use book, alexa, or both only when the caller asks for those specific items.';
+const sendConfirmation = 'Only after a clear yes to the latest readback, invoke SpockSendRecruiterLinks once for that exact channel, destination, and selection. The caller saying yes is permission to attempt a send. Wait for the actual tool result before responding. With accepted and a nonempty receiptId, say the provider accepted the send request. With already_accepted and a nonempty receiptId, say it was accepted earlier. Treat a missing tool result or receipt as unconfirmed. Never say the message arrived or give an ETA.';
+const sendFailures = 'If the tool returns identity_not_verified, say the email service rejected the request because an address needs verification, and offer the links in chat or another verified email address. For invalid_destination, ask for a correction and confirm again. For rejected, unconfirmed, timeout, or any other error, state that the send could not be confirmed and offer the public portfolio. Avoid automatic retries.';
+const deliveryScope = 'This tool sends only the approved portfolio, book, and Alexa app links. Share individual public portfolio links in chat when asked. For booking or transfer requests, direct callers to the portfolio contact page.';
 const bothDeliveryGuidance = [
-  'When the caller is interested in the book or Alexa app, ask “Would you like me to text or email you the links?” Use “the link” for a single item. If they already chose a channel, ask for their own number or address for that channel.',
+  samplesOffer,
+  'Make the offer concrete, such as “Would you like me to email or text you two CX portfolio samples?” If the caller already chose a channel, ask for their own number or address for that channel.',
   'Collect only the selected destination. For SMS, use the confirmed number with its country code. For email, clarify spelling when needed. Read back the destination, channel, and which links you will send, then wait for a clear yes. A correction, channel change, or selection change needs a fresh readback and confirmation. Treat a no, unrelated reply, or silence as no permission to send.',
   sendConfirmation,
-  'On invalid_destination, ask the caller to correct it and confirm again. On any other failure or uncertain result, say you could not confirm the send and offer the links in chat or at hire Edward Thornton dot click. Ask for a fresh channel choice and confirmation before trying a different destination or channel. Avoid automatic retries.',
+  sendFailures,
   deliveryScope,
 ];
 const emailDeliveryGuidance = [
-  'Offer to email the requested book or Alexa app links. If the caller requests text, offer email or the portfolio instead. Ask only for an email address the caller controls.',
-  'Clarify the address spelling when needed. Read back the email address and which links you will send, then wait for a clear yes. A correction or change to the links needs a new readback and confirmation. Treat a no, unrelated reply, or silence as no permission to send.',
+  samplesOffer,
+  'Make the offer concrete, such as “I can email you two portfolio samples that show his CX architecture work. Would you like me to send those over?” If the caller requests text, offer email or the public portfolio. Ask only for an email address the caller controls.',
+  'Clarify the address spelling when needed. Read back the email address and which links you will send, then ask “Is that the right address for those links?” and wait for a clear yes. A correction or change to the links needs a new readback and confirmation. Treat a no, unrelated reply, or silence as no permission to send.',
   sendConfirmation,
-  'On invalid_destination, ask the caller to correct the email address and confirm again. On any other failure or uncertain result, say you could not confirm the send and offer the links in chat or at hire Edward Thornton dot click. Avoid automatic retries.',
+  sendFailures,
   deliveryScope,
 ];
 
@@ -217,23 +236,22 @@ const paths = [
   },
   {
     id: 'Recruiter',
-    version: 3,
+    version: 5,
     originalReply: 'Got it. You’re calling about hiring. This is Spock’s recruiter path.',
     intent: 'Use when the caller is hiring, recruiting, evaluating a candidate, discussing a job, or asks about Edward Thornton for a role.',
-    refinedIntent: 'Use for hiring inquiries or questions about Edward Thornton, including his experience, qualifications, books, and Alexa app.',
+    refinedIntent: 'Use for recruiter questions about Edward Thornton, Principal CX Architect fit, experience, qualifications, or portfolio.',
     guidance: [
-      'Ask what the person in the role would be responsible for. If the caller already gave that information, ask which requirement matters most or immediately show a matching case when the priority is clear.',
-      'Connect a real design decision to the requirement. For example, discuss the working queue before transfer for Amazon Connect, screened acceptance and recovery for voice automation, or separating raw data from the serving index for data engineering.',
-      'If they change the role or priority, update the example and explain the new match. Avoid guessing about availability, compensation, or credentials.',
+      'Lead with Edward’s fit for Principal CX Architect responsibilities across AWS and Google Cloud. Explain what he can own and what makes him credible. Speak about Edward in the third person and distinguish role fit from a current job title or employer.',
+      'If someone just says they are a recruiter, open with “Edward is focused on Principal CX Architect roles, with hands-on work across Amazon Connect and Google Cloud. What would you need him to own on your team?” If they have already described the role, answer or ask the most relevant question without repeating discovery.',
+      'Ask one specific question about their hiring need, such as the CX problem to solve, the platform they use, or what the architect should own. Use the caller’s answer to tailor the next turn. A direct question about Edward’s qualifications gets a direct answer before any discovery or offer.',
     ],
     extraTools: [recruiterProfile],
     refinements: [
-      'When asked about Edward, his qualifications, why to hire him, his voice and chat background, his book, his Alexa app, or his credentials, call SpockRecruiterQualifications and answer the question first. Speak about Edward in the third person. Ask about the role only if it would help tailor the next answer.',
-      'For voice and chat fit, explain that Edward has built conversational experiences for years. Describe the Alexa project as an AI-assisted voice app for Alexa devices. Someone says a word and the app reads back rhyming suggestions. Refer to it by what it does and omit publisher branding. Mention Voice Applications for Beginners and what it teaches, then relate this background to the role. Use Loop Social when asked for a specific chat or messaging example.',
-      'An example of a natural answer for a voice and chat role is “Edward has years of hands-on experience with voice and chat. He built an AI-assisted voice app for Alexa devices where you say a word and hear rhyming suggestions for lyrics or poetry. He also wrote Voice Applications for Beginners and applies that experience to designing call flows and live handoffs.” Adapt the example to the role and use the public evidence for any project details.',
-      'When the role is known, explain how Edward’s experience fits the responsibility and ground it in a design decision. Use SpockEnterpriseConnectCase for Amazon Connect or contact center routing, SpockMayaCase for conversational AI or live handoffs, and SpockAncestorIQCase for data engineering. Call SpockRecruiterQualifications for platform or DevOps work and use Energy Transmission. For security, use its private webhook and runtime secret example. If the caller corrects the role, use the new evidence without restarting the conversation.',
-      'For a full qualifications overview, cover cross-cloud architecture and operations, relevant credentials, and technical communication alongside voice and chat. Prioritize the role-specific evidence in focused answers. Describe portfolio projects as independent builds and keep claims grounded in the tools.',
-      'When asked to show links in chat, use the profile’s bookLink and alexaSkillLink for the requested items. Use alexaLaunchLink if asked how to try the app. On a call, avoid reading URLs aloud and use the available sharing options.',
+      'Use SpockRecruiterCxQualifications to answer questions about CX, work expertise, credentials, or why hire Edward. Lead with the responsibility he can own, then name one or two grounded qualifications. For a broad CX question, talk about contact center architecture, conversational self-service, routing, handoffs, secure integrations, and his cross-cloud depth. Lead with CX architecture instead of a menu of role categories.',
+      'A concise CX answer can say “Edward is a strong fit for a Principal CX Architect role. He brings the architecture and hands-on implementation together, from Amazon Connect routing to secure conversational AI on Google Cloud, and holds the Google Cloud Professional Cloud Architect certification.” Tailor the answer to the responsibility the recruiter cares about.',
+      'Use projects as evidence for a specific skill or design decision, especially when asked for an example. Use SpockEnterpriseConnectCase for Amazon Connect, SpockMayaCase for Dialogflow CX or screened phone handoffs, and SpockAncestorIQCase for data engineering. Use the qualifications profile for platform engineering, cloud security, and credentials. Say public project names when useful and keep internal tool names private. Maya is a phone workflow with SMS follow-up. Describe independent portfolio work accurately and avoid claims about employment history, delivery guarantees, or unverified project scope.',
+      'Discuss the Alexa app or Voice Applications for Beginners only when the caller asks about them or about Edward’s voice development background. The Alexa app suggests rhymes aloud, and the book teaches first-time developers to build voice apps. Keep those separate from the contact center and live handoff work. Refer to the Alexa app by its function and omit publisher branding.',
+      'If the recruiter changes the role or priority, use the new information without restarting. In chat, share the requested approved public links. On a call, offer the available way to share links and avoid reading URLs aloud.',
     ],
   },
   {
@@ -299,7 +317,9 @@ function flowSpec(path, { version = 1, refinements = [], extraTools = [], linkDe
     messages: [{ type: 'text', body }], childNodes: [link('end')],
   });
 
-  const guidance = linkDelivery ? shared.filter((line) => line !== sharingWithoutDelivery) : shared;
+  const guidance = shared.filter((line) =>
+    (!linkDelivery || line !== sharingWithoutDelivery) &&
+    (path.id !== 'Recruiter' || (line !== solutionGuidance && line !== projectGuidance)));
   const deliveryGuidance = { email: emailDeliveryGuidance, both: bothDeliveryGuidance }[linkDelivery] ?? [];
   const prompt = [...path.guidance, ...guidance, ...refinements, ...deliveryGuidance];
   const tools = [...cases, ...extraTools, ...(linkDelivery ? [linkTool] : [])];
@@ -321,8 +341,8 @@ function flowSpec(path, { version = 1, refinements = [], extraTools = [], linkDe
         maxSteps: 10,
         maxTokens: 2048,
         temperature: 0.3,
-        tools: tools.map(({ id: dataRequestId }) => ({
-          type: 'dataRequest', dataRequest: { dataRequestId, payload: {} },
+        tools: tools.map(({ id: dataRequestId, prompt }) => ({
+          type: 'dataRequest', dataRequest: { dataRequestId, payload: {} }, ...(prompt ? { prompt } : {}),
         })),
         exitConditions: [{ name: 'done', prompt: 'The caller indicates that they are finished and all requested answers have been delivered.' }],
       },
@@ -346,14 +366,20 @@ function journeySignature(flow, flowId) {
   ]));
 }
 
-// Fingerprint of the first recruiter profile build for callers who already installed it.
-const priorRecruiter = '7374c6dc58065a5ab1f00293d80538765cd8c87f3d4bc478d8eefb616b053ef1';
+// Previously shipped recruiter journeys, including both link delivery modes.
+const priorRecruiterSignatures = new Set([
+  'b09ba0392dfa5044f46ef5ebeb2c7f8ef1c7a3f2b326feb01f77c3f5b58ea4e4', // Original recruiter journey
+  '7374c6dc58065a5ab1f00293d80538765cd8c87f3d4bc478d8eefb616b053ef1', // First qualifications profile
+  '090e0440eccdad9bfe49817b3351d61c651ce712bd637380ca5c1e97809b4e8e', // Conversation only
+  'cac6358c2df75c151ef3ae9324fd407af1840059d21dec75a127c8d11637fa75', // Email delivery
+  'b265373dde57116903f4ece187d49a91acdc08a70033e95f47a214ae119e0a9e', // Email and SMS delivery
+]);
 
 function inspectFlow(path, flow, spec, supported) {
   const current = journeySignature(flow, path.id);
   if (current === journeySignature(spec, path.id)) return 'installed';
   if (supported.some((version) => current === journeySignature(version, path.id)) ||
-      (path.id === 'Recruiter' && current === priorRecruiter)) return 'upgrade';
+      (path.id === 'Recruiter' && priorRecruiterSignatures.has(current))) return 'upgrade';
   const id = (label) => nodeId(path.id, label);
   if (flow.description === 'Spock caller route: ' + path.id &&
       Object.keys(flow.nodes ?? {}).length === 3 &&
@@ -382,7 +408,11 @@ function refineJourney(flow, spec) {
           generativeJourney: {
             ...current,
             prompt: desired.prompt,
-            tools: desired.tools.map((tool) => existingTools.get(tool.dataRequest.dataRequestId) ?? tool),
+            tools: desired.tools.map((tool) => {
+              const installed = existingTools.get(tool.dataRequest.dataRequestId);
+              if (installed && tool.prompt) return { ...installed, prompt: tool.prompt };
+              return installed ?? tool;
+            }),
           },
         },
       },
@@ -484,7 +514,8 @@ async function installLinkDelivery() {
   const secret = await lookup(GetSecretCommand, { secretIdentifier: secretName });
   const existing = await lookup(GetDataRequestCommand, { dataRequestIdentifier: linkTool.id });
   check(!secret || secret.description === secretDescription, 'A different Designer secret uses the link delivery name.');
-  check(!existing || existing.description === linkTool.description, 'A different Designer data request uses the link delivery name.');
+  check(!existing || [linkTool.description, priorLinkToolDescription].includes(existing.description),
+    'A different Designer data request uses the link delivery name.');
   const url = deployLinkApi();
   const unauthed = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(15000) });
   check(unauthed.status === 401, 'The link delivery API did not reject an unauthenticated request.');
@@ -493,6 +524,8 @@ async function installLinkDelivery() {
     headers: { 'content-type': 'application/json', 'x-spock-link-key': webhookKey }, body: '{}',
   });
   check(probe.ok && (await probe.json()).status === 'invalid_request', 'The link delivery API failed its no-send check.');
+  check(probe.headers.get('x-spock-links-version') === '2',
+    'Update the Spock link delivery stack to the current template before installing the recruiter flow.');
 
   if (!secret) {
     await send(CreateSecretCommand, {
@@ -516,9 +549,9 @@ async function installLinkDelivery() {
   };
   if (!existing) return send(CreateDataRequestCommand, { dataRequestId: linkTool.id, ...config });
   const webhook = existing.webhook;
-  const currentChannels = existing.requestSchema?.properties?.channel?.enum;
-  const desiredChannels = linkTool.requestSchema.properties.channel.enum;
-  if (JSON.stringify(currentChannels) !== JSON.stringify(desiredChannels) ||
+  if (existing.description !== config.description ||
+      !isDeepStrictEqual(existing.requestSchema, config.requestSchema) ||
+      !isDeepStrictEqual(existing.responseSchema, config.responseSchema) ||
       existing.sensitive !== true || webhook?.implementation !== 'external' || webhook.method !== 'POST' ||
       webhook.sendContext !== false || webhook.url !== url || webhook.environments?.development?.url !== url ||
       webhook.environments?.production?.url !== url) {
@@ -556,15 +589,16 @@ try {
     const originalSpec = flowSpec(path);
     const standardSpec = path.refinements ? flowSpec(path, { ...path, version: path.version ?? 2 }) : originalSpec;
     const recruiter = path.id === 'Recruiter';
-    const emailSpec = recruiter ? flowSpec(path, { ...path, version: '4-email', linkDelivery: 'email' }) : null;
-    const spec = recruiter && withLinkDelivery
-      ? (emailOnly ? emailSpec : flowSpec(path, { ...path, version: 4, linkDelivery: 'both' }))
-      : standardSpec;
+    const emailSpec = recruiter ? flowSpec(path, { ...path, version: '5-email', linkDelivery: 'email' }) : null;
+    const bothSpec = recruiter ? flowSpec(path, { ...path, version: '5-links', linkDelivery: 'both' }) : null;
+    const spec = recruiter && withLinkDelivery ? (emailOnly ? emailSpec : bothSpec) : standardSpec;
     const original = await send(GetFlowCommand, { flowIdentifier: path.id });
-    if (recruiter && deliveryMode !== 'both' && original.description === 'Spock portfolio conversation v4: Recruiter') {
+    if (recruiter && deliveryMode !== 'both' &&
+        [bothSpec.description, 'Spock portfolio conversation v4: Recruiter'].includes(original.description)) {
       throw new Error('Recruiter link delivery is installed. Rerun with --with-link-delivery to update it.');
     }
-    if (recruiter && !withLinkDelivery && original.description === emailSpec.description) {
+    if (recruiter && !withLinkDelivery &&
+        [emailSpec.description, 'Spock portfolio conversation v4-email: Recruiter'].includes(original.description)) {
       throw new Error('Recruiter email delivery is installed. Rerun with --with-email-delivery to update it.');
     }
     const supported = [originalSpec, standardSpec];
