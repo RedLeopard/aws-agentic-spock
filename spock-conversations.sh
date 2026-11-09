@@ -216,10 +216,9 @@ const emailDeliveryGuidance = [
   deliveryScope,
 ];
 
-const recruiterIntro = 'Edward Thornton is a hands-on cloud solutions architect who takes systems from design through deployment on AWS and Google Cloud. ' +
+const recruiterIntro = 'Edward Thornton is a hands-on solutions architect who builds on AWS and Google Cloud. ' +
   'He’s migrated legacy contact centers to AWS and designed routing for centers supporting 300 to 500 agents. ' +
-  'He builds with Amazon Connect and Dialogflow CX, and his broader cloud work covers secure APIs and data integrations, Terraform, Kubernetes, automated deployments, and monitoring. ' +
-  'He holds Google Cloud’s Professional Cloud Architect certification. What would you need him to deliver first?';
+  'His work spans Amazon Connect, Dialogflow CX, and secure cloud integrations. What would you need him to deliver first?';
 
 const paths = [
   {
@@ -392,6 +391,9 @@ const priorRecruiterSignatures = new Set([
   '3f1591c1ab2452423faa5a23e1571d60ea207f50f9f108ceb618d4699747b5b3', // Scale and migration opener
   '9a4038aaf6ee5c0475320daacb674f34f4d5f50a5703b864de93f5ad06eb7ecf', // Scale and migration opener with email
   'dc2f3bba7bb474c3496dc1e99adc85a150b571494193b4cd5f45a41b30ecec06', // Scale and migration opener with email and SMS
+  'a9080b4aee89caaba972d8fe00c04ebd5fa37b42c277999199665302f8d910e3', // Full architecture introduction
+  'c08139c05b67bfee02b87cf02a508d7cf71e10242ccff68c542b6cdee96ef666', // Full introduction with email
+  'c8c722307c82d3cca14d612e116db517c9a041e966946ae2600829939d8c61b6', // Full introduction with email and SMS
 ]);
 
 function inspectFlow(path, flow, spec, supported) {
