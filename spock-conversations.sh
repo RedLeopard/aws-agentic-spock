@@ -76,6 +76,7 @@ import {
 const applicationIdentifier = process.env.SPOCK_APPLICATION_ID;
 const apiKey = process.env.ACXD_API_KEY;
 delete process.env.ACXD_API_KEY;
+const recruiterOnly = process.env.SPOCK_RECRUITER_ONLY === '1';
 const deliveryMode = process.env.SPOCK_LINK_DELIVERY_MODE;
 const emailOnly = deliveryMode === 'email';
 const withLinkDelivery = emailOnly || deliveryMode === 'both';
@@ -654,20 +655,23 @@ async function buildApp(app, revisions) {
   throw new Error('Build is still processing. Check its status in Designer.');
 }
 
-function checkSpockApp(app) {
+async function readSpockApp() {
+  const app = await send(GetApplicationCommand, { applicationIdentifier });
   if (app.name !== 'AWS Agentic Spock' || app.settings?.defaultFlows?.welcome?.flowId !== 'SpockWelcome' ||
       !paths.every((path) => app.flows?.some(({ flowId }) => flowId === path.id))) {
     throw new Error('Expected the AWS Agentic Spock app with its original greeting and three routes.');
   }
-  const unknown = app.settings.defaultFlows.unknown;
-  check(!unknown?.knowledgeBaseId && (!unknown?.flowId || unknown.flowId === recoveryPath.id) &&
-    (unknown?.quickReplies ?? []).every((reply) => reply.trim().replaceAll('’', "'") === "I'm sorry, I do not understand."),
-  'Spock already has a custom Unknown response. Review it before installing conversation recovery.');
+  if (!recruiterOnly) {
+    const unknown = app.settings.defaultFlows.unknown;
+    check(!unknown?.knowledgeBaseId && (!unknown?.flowId || unknown.flowId === recoveryPath.id) &&
+      (unknown?.quickReplies ?? []).every((reply) => reply.trim().replaceAll('’', "'") === "I'm sorry, I do not understand."),
+    'Spock already has a custom Unknown response. Review it before installing conversation recovery.');
+  }
+  return app;
 }
 
 async function installUnknownFlow() {
-  const app = await send(GetApplicationCommand, { applicationIdentifier });
-  checkSpockApp(app);
+  const app = await readSpockApp();
   const { settings, flows } = app;
   const { defaultFlows } = settings;
   const attached = flows.some(({ flowId }) => flowId === recoveryPath.id);
@@ -681,15 +685,12 @@ async function installUnknownFlow() {
 
 let phase = 'Checking Spock';
 try {
-  checkSpockApp(await send(GetApplicationCommand, { applicationIdentifier }));
-  const recovery = flowSpec(recoveryPath, { ...recoveryPath, sideQuestions: true });
-  const originalRecovery = await send(GetFlowCommand, { flowIdentifier: recovery.flowIdentifier });
-  const recoveryState = inspectRecoveryFlow(originalRecovery, recovery);
-
+  await readSpockApp();
   const updates = [];
   for (const path of paths) {
-    const standardOptions = path.refinements ? { ...path, version: path.version ?? 2 } : {};
     const recruiter = path.id === 'Recruiter';
+    if (recruiterOnly && !recruiter) continue;
+    const standardOptions = path.refinements ? { ...path, version: path.version ?? 2 } : {};
     const emailOptions = { ...path, version: '5-email', linkDelivery: 'email' };
     const bothOptions = { ...path, version: '5-links', linkDelivery: 'both' };
     const options = recruiter && withLinkDelivery ? (emailOnly ? emailOptions : bothOptions) : standardOptions;
@@ -710,7 +711,11 @@ try {
     ])];
     updates.push({ spec, original, state: inspectFlow(path, original, spec, supported) });
   }
-  updates.push({ spec: recovery, original: originalRecovery, state: recoveryState });
+  if (!recruiterOnly) {
+    const spec = flowSpec(recoveryPath, { ...recoveryPath, sideQuestions: true });
+    const original = await send(GetFlowCommand, { flowIdentifier: spec.flowIdentifier });
+    updates.push({ spec, original, state: inspectRecoveryFlow(original, spec) });
+  }
   const dataRequests = [...cases, recruiterProfile];
   const presentRequests = new Set();
   for (const entry of dataRequests) {
@@ -755,8 +760,16 @@ try {
     console.log('Ready ' + spec.flowIdentifier);
   }
 
-  phase = 'Routing unmatched messages to Spock';
-  const app = await installUnknownFlow();
+  phase = recruiterOnly ? 'Reading the existing app for Designer Test' : 'Routing unmatched messages to Spock';
+  const app = recruiterOnly ? await readSpockApp() : await installUnknownFlow();
+  if (recruiterOnly) {
+    // A build snapshots the whole app, so its cache key still includes the other attached flows.
+    for (const { flowId } of app.flows) {
+      if (flowId === 'Recruiter') continue;
+      const flow = await send(GetFlowCommand, { flowIdentifier: flowId });
+      revisions.push(flowId, revisionOf(flow));
+    }
+  }
 
   phase = 'Building the app for Designer Test';
   console.log('READY FOR DESIGNER TEST: ' + await buildApp(app, revisions));

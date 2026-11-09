@@ -109,6 +109,12 @@ For an existing stack, update it with the current template before building the r
 SPOCK_USE_EXISTING_LINK_STACK=1 bash spock-conversations.sh --with-email-delivery
 ```
 
+To update the recruiter journey on an app that has customized caller routes, use the recruiter-only installer. It checks the recruiter flow for compatibility and builds with the other flows and app settings already in Designer.
+
+```bash
+SPOCK_RECRUITER_ONLY=1 SPOCK_USE_EXISTING_LINK_STACK=1 bash spock-conversations.sh --with-email-delivery
+```
+
 ## Launch checks
 
 - **Caller email and SMS.** Verify actual receipt on both channels. Client recaps and other follow-up links are separate from the recruiter delivery flow.
