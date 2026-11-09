@@ -89,6 +89,12 @@ Spock sends the book link, the Alexa app link, or both as requested. It asks the
 
 Either delivery flag provisions [the link delivery stack](spock-link-delivery.yaml), checks the authenticated webhook without sending a message, and attaches the send tool to the recruiter route. For a conversation-only build, run the installer without a flag before enabling delivery. Once enabled, include the flag for the enabled mode or upgrade from email to both channels.
 
+If an AWS administrator provisions the stack separately, upload `spock-link-delivery.yaml` to CloudFormation in Oregon. Use stack name `aws-agentic-spock-link-delivery`, set `SesIdentity` and `SesFromEmail` to match `.spock.env`, and leave `SmsOriginationArn` blank for email-only testing. Add stack tags `Project=aws-agentic-spock` and `Component=link-delivery`, then acknowledge the template's IAM role. After the stack completes, the local AWS profile needs `cloudformation:DescribeStacks` for this stack and `secretsmanager:GetSecretValue` for the secret ARN listed as `WebhookKeyArn` in its Outputs tab. The Designer installer uses those outputs to wire the webhook.
+
+```bash
+SPOCK_USE_EXISTING_LINK_STACK=1 bash spock-conversations.sh --with-email-delivery
+```
+
 ## Launch checks
 
 - **Caller email and SMS.** Verify actual receipt on both channels. Client recaps and other follow-up links are separate from the recruiter delivery flow.

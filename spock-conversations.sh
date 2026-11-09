@@ -449,13 +449,24 @@ function deployLinkApi() {
   const existingSms = existing?.Parameters?.find(({ ParameterKey }) => ParameterKey === 'SmsOriginationArn')?.ParameterValue;
   check(!emailOnly || !existingSms, 'Text delivery is configured in the stack. Rerun with --with-link-delivery.');
 
-  aws([
-    'cloudformation', 'deploy', '--template-file', join(process.env.SPOCK_INSTALLER_ROOT, 'spock-link-delivery.yaml'),
-    '--stack-name', stackName, '--capabilities', 'CAPABILITY_IAM', '--no-fail-on-empty-changeset',
-    '--parameter-overrides', ...parameters,
-    '--tags', 'Project=aws-agentic-spock', 'Component=link-delivery',
-  ], true);
-  const outputs = Object.fromEntries(readStack().Outputs.map(({ OutputKey, OutputValue }) => [OutputKey, OutputValue]));
+  let stack = existing;
+  if (process.env.SPOCK_USE_EXISTING_LINK_STACK === '1') {
+    check(stack && ['CREATE_COMPLETE', 'UPDATE_COMPLETE'].includes(stack.StackStatus),
+      'Create the Spock link delivery stack and wait for it to complete before using it.');
+    const savedParameters = Object.fromEntries(stack.Parameters.map(({ ParameterKey, ParameterValue }) => [ParameterKey, ParameterValue]));
+    check(savedParameters.SesIdentity === identity && savedParameters.SesFromEmail === from &&
+      (savedParameters.SmsOriginationArn ?? '') === smsArn,
+    'The existing stack parameters must match the local sender settings and delivery mode.');
+  } else {
+    aws([
+      'cloudformation', 'deploy', '--template-file', join(process.env.SPOCK_INSTALLER_ROOT, 'spock-link-delivery.yaml'),
+      '--stack-name', stackName, '--capabilities', 'CAPABILITY_IAM', '--no-fail-on-empty-changeset',
+      '--parameter-overrides', ...parameters,
+      '--tags', 'Project=aws-agentic-spock', 'Component=link-delivery',
+    ], true);
+    stack = readStack();
+  }
+  const outputs = Object.fromEntries((stack?.Outputs ?? []).map(({ OutputKey, OutputValue }) => [OutputKey, OutputValue]));
   check(/^https:\/\/[a-z0-9]+\.execute-api\.us-west-2\.amazonaws\.com$/.test(outputs.DeliveryApiUrl) &&
     outputs.WebhookKeyArn?.startsWith('arn:aws:secretsmanager:' + region + ':' + account + ':secret:'),
     'The link delivery stack did not return the expected endpoint and secret.');
