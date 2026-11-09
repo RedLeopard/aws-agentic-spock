@@ -1,0 +1,274 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Consent-based email and SMS delivery of Spock's recruiter links
+Parameters:
+  SesIdentity:
+    Type: String
+    Description: Verified SES email address or domain in us-west-2
+  SesFromEmail:
+    Type: String
+    Description: Email address Spock sends from
+  SmsOriginationArn:
+    Type: String
+    Description: ARN of the registered SMS number or pool in us-west-2
+    AllowedPattern: 'arn:aws:sms-voice:us-west-2:[0-9]{12}:(phone-number|pool)/[A-Za-z0-9-]+'
+Resources:
+  WebhookKey:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Credential for Spock's link delivery webhook
+      GenerateSecretString:
+        PasswordLength: 48
+        ExcludePunctuation: true
+  DeliveryAttempts:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: requestKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: requestKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+  DeliveryLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}'
+      RetentionInDays: 7
+  DeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SpockLinkDelivery
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ses:SendEmail
+                Resource: !Sub 'arn:${AWS::Partition}:ses:${AWS::Region}:${AWS::AccountId}:identity/${SesIdentity}'
+                Condition:
+                  StringEquals:
+                    'ses:FromAddress': !Ref SesFromEmail
+              - Effect: Allow
+                Action: sms-voice:SendTextMessage
+                Resource: !Ref SmsOriginationArn
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref WebhookKey
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt DeliveryAttempts.Arn
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt DeliveryLogs.Arn
+  DeliverLinks:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref AWS::StackName
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt DeliveryRole.Arn
+      MemorySize: 128
+      Timeout: 10
+      Environment:
+        Variables:
+          WEBHOOK_KEY_ARN: !Ref WebhookKey
+          ATTEMPTS_TABLE: !Ref DeliveryAttempts
+          FROM_EMAIL: !Ref SesFromEmail
+          SMS_ORIGINATION_ARN: !Ref SmsOriginationArn
+      Code:
+        ZipFile: |
+          """Deliver a fixed set of public links after caller confirmation."""
+
+          import base64
+          import hmac
+          import json
+          import os
+          import re
+          import time
+          from functools import lru_cache
+
+          import boto3
+          from botocore.config import Config
+          from botocore.exceptions import BotoCoreError, ClientError
+
+          # A provider timeout is ambiguous. Let the duplicate guard handle repeats.
+          CONFIG = Config(connect_timeout=2, read_timeout=2, retries={"total_max_attempts": 1})
+          SES = boto3.client("sesv2", config=CONFIG)
+          SMS = boto3.client("pinpoint-sms-voice-v2", config=CONFIG)
+          DB = boto3.client("dynamodb", config=CONFIG)
+          SECRETS = boto3.client("secretsmanager", config=CONFIG)
+          TABLE = os.environ["ATTEMPTS_TABLE"]
+          DEDUP_SECONDS = 600
+          BOOK = "Voice Applications for Beginners: https://www.amazon.com/dp/B09SNKVGSR"
+          ALEXA = "Alexa app: https://www.amazon.com/dp/B09PNKJH5C"
+          LINKS = {"book": BOOK, "alexa": ALEXA, "both": BOOK + "\n" + ALEXA}
+          EMAIL = re.compile(
+              r"[A-Za-z0-9!#$%&'*+/=?^_\x60{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_\x60{|}~-]+)*@"
+              r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}"
+          )
+          PHONE = re.compile(r"\+[1-9][0-9]{1,14}")
+
+
+          @lru_cache(maxsize=1)
+          def webhook_key():
+              return SECRETS.get_secret_value(SecretId=os.environ["WEBHOOK_KEY_ARN"])["SecretString"].encode()
+
+
+          def respond(status, code=200):
+              return {
+                  "statusCode": code,
+                  "headers": {"content-type": "application/json", "cache-control": "no-store"},
+                  "body": json.dumps({"status": status}),
+              }
+
+
+          def send_links(channel, destination, links):
+              if channel == "sms":
+                  return SMS.send_text_message(
+                      DestinationPhoneNumber=destination,
+                      OriginationIdentity=os.environ["SMS_ORIGINATION_ARN"],
+                      MessageBody="Edward Thornton\n" + links + "\nReply STOP to opt out.",
+                      MessageType="TRANSACTIONAL",
+                      MaxPrice="0.10",
+                  )
+              return SES.send_email(
+                  FromEmailAddress=os.environ["FROM_EMAIL"],
+                  Destination={"ToAddresses": [destination]},
+                  Content={"Simple": {
+                      "Subject": {"Data": "Links you requested about Edward Thornton", "Charset": "UTF-8"},
+                      "Body": {"Text": {"Data": "Here are the links you requested.\n\n" + links, "Charset": "UTF-8"}},
+                  }},
+              )
+
+
+          def deliver(channel, destination, selection, secret):
+              now = int(time.time())
+              # Store a keyed digest and status. The raw destination stays out of the table.
+              digest = hmac.digest(
+                  secret, json.dumps(["delivery", channel, destination.casefold(), selection]).encode(), "sha256",
+              ).hex()
+              key = {"requestKey": {"S": digest}}
+              try:
+                  DB.put_item(
+                      TableName=TABLE,
+                      Item={**key, "expiresAt": {"N": str(now + DEDUP_SECONDS)}, "outcome": {"S": "unconfirmed"}},
+                      ConditionExpression="attribute_not_exists(requestKey) OR expiresAt <= :now",
+                      ExpressionAttributeValues={":now": {"N": str(now)}},
+                  )
+              except DB.exceptions.ConditionalCheckFailedException:
+                  item = DB.get_item(TableName=TABLE, Key=key, ConsistentRead=True).get("Item", {})
+                  previous = item.get("outcome", {}).get("S")
+                  return "already_accepted" if previous == "accepted" else previous or "unconfirmed"
+
+              try:
+                  receipt = send_links(channel, destination, LINKS[selection])
+                  outcome = "accepted" if receipt.get("MessageId") else "unconfirmed"
+              except ClientError as error:
+                  status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
+                  outcome = "rejected" if 400 <= status < 500 else "unconfirmed"
+                  code = error.response.get("Error", {}).get("Code", "Unknown")
+                  print(f"Spock {channel} provider outcome={outcome} awsCode={code}.")
+              except BotoCoreError:
+                  print(f"Spock {channel} provider response was unconfirmed.")
+                  outcome = "unconfirmed"
+              DB.update_item(
+                  TableName=TABLE,
+                  Key=key,
+                  UpdateExpression="SET outcome = :outcome",
+                  ExpressionAttributeValues={":outcome": {"S": outcome}},
+              )
+              return outcome
+
+
+          def handler(event, _context):
+              headers = {name.lower(): value for name, value in (event.get("headers") or {}).items()}
+              supplied = headers.get("x-spock-link-key", "").encode()
+              if len(supplied) != 48:
+                  return respond("unauthorized", 401)
+              try:
+                  secret = webhook_key()
+                  if not hmac.compare_digest(supplied, secret):
+                      return respond("unauthorized", 401)
+                  body = event.get("body") or ""
+                  if len(body) > 2048:
+                      return respond("invalid_request")
+                  if event.get("isBase64Encoded"):
+                      body = base64.b64decode(body, validate=True)
+                  payload = json.loads(body)
+                  if not isinstance(payload, dict) or set(payload) != {"channel", "destination", "selection", "confirmed"}:
+                      return respond("invalid_request")
+                  if payload["confirmed"] is not True:
+                      return respond("confirmation_required")
+                  channel, destination, selection = (payload[name] for name in ("channel", "destination", "selection"))
+                  if not all(isinstance(value, str) for value in (channel, destination, selection)) or selection not in LINKS:
+                      return respond("invalid_request")
+                  if channel == "sms":
+                      valid = PHONE.fullmatch(destination)
+                  elif channel == "email":
+                      valid = len(destination) <= 254 and len(destination.partition("@")[0]) <= 64 and EMAIL.fullmatch(destination)
+                  else:
+                      valid = False
+                  if not valid:
+                      return respond("invalid_destination")
+                  return respond(deliver(channel, destination, selection, secret))
+              except ValueError:
+                  return respond("invalid_request")
+              except (BotoCoreError, ClientError):
+                  print("Spock link delivery could not verify the send status.")
+                  return respond("unconfirmed")
+  DeliveryApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Ref AWS::StackName
+      ProtocolType: HTTP
+  DeliveryIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref DeliveryApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt DeliverLinks.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 12000
+  DeliveryRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DeliveryApi
+      RouteKey: POST /links
+      Target: !Sub 'integrations/${DeliveryIntegration}'
+  DeliveryStage:
+    Type: AWS::ApiGatewayV2::Stage
+    DependsOn: DeliveryRoute
+    Properties:
+      ApiId: !Ref DeliveryApi
+      StageName: '$default'
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingRateLimit: 2
+        ThrottlingBurstLimit: 4
+  DeliveryPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DeliverLinks
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${DeliveryApi}/*/POST/links'
+Outputs:
+  DeliveryApiUrl:
+    Value: !GetAtt DeliveryApi.ApiEndpoint
+  WebhookKeyArn:
+    Value: !Ref WebhookKey

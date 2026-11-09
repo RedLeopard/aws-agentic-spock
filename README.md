@@ -7,7 +7,7 @@ Spock is a voice-first portfolio experience built with Amazon Connect and Agenti
 | Path | What Spock does |
 | --- | --- |
 | Potential client | Asks about the caller’s workflow, recommends a practical first step, and explains the benefit. Website chatbots, AI phone assistants, live-agent handoffs, automation, and full contact centers are all possible paths. |
-| Recruiter | Answers direct questions about Edward’s qualifications and matches the role to a project or skill. It can explain his years of voice and chat work, the Alexa skill he shipped, and the book he wrote on voice development. |
+| Recruiter | Answers direct questions about Edward’s qualifications and matches the role to a project. It can explain his years of voice and chat work and describe how his Alexa app suggests rhymes. With delivery enabled, it can send the app and book links by text or email. |
 | Live demo | Leads with a short choice of examples and follows the caller’s questions. A caller can switch topics or turn the walkthrough into a conversation about a real need. |
 
 Each path can call three read-only Designer data requests. They contain public project facts and limits on what Spock can claim about each build.
@@ -18,7 +18,7 @@ Each path can call three read-only Designer data requests. They contain public p
 | [Project Enterprise Connect](https://github.com/RedLeopard/project-enterprise-connect) | Amazon Connect queue routing, real-time metrics, and call recordings in S3. |
 | [AncestorIQ](https://github.com/RedLeopard/AncestorIQ) | A FastAPI search application on Cloud Run, backed by a BigQuery index of historical records. |
 
-The recruiter route also uses a public qualifications profile. It includes [Voice Applications for Beginners](https://a.co/d/0ftqIws5), the [Street Genius Rhyming Words Alexa skill](https://www.amazon.com/Street-Genius-Rhyming-Words/dp/B09PNKJH5C), Loop Social’s real-time messaging, [Energy Transmission](https://hireedwardthornton.click/energy-transmission.html) for platform engineering, Maya’s authenticated webhook for security, and Edward’s cloud credentials and technical writing.
+The recruiter route also uses a public qualifications profile. It includes [Voice Applications for Beginners](https://www.amazon.com/dp/B09SNKVGSR), an [AI-assisted voice app for Alexa devices](https://www.amazon.com/dp/B09PNKJH5C) that suggests rhymes when you say a word, Loop Social’s real-time messaging, [Energy Transmission](https://hireedwardthornton.click/energy-transmission.html) for platform engineering, Maya’s authenticated webhook for security, and Edward’s cloud credentials and technical writing.
 
 ## Designer checkpoint
 
@@ -48,17 +48,39 @@ Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **A
 | Start with | Follow up with | What to verify |
 | --- | --- | --- |
 | “I’m a potential client. We miss calls after hours, and following up with leads takes too long.” | “Actually, most of our inquiries come through the website. We still want customers to reach a live person when it’s urgent.” | Spock pivots to website chat, explains how leads get logged and followed up, and describes the urgent handoff and fallback. It asks one question and relates Maya’s phone workflow where relevant. |
-| “Why should we hire Edward?” | “What did his Alexa skill do? Can you share links to that and his book?” | Spock answers before asking about the role, uses `SpockRecruiterProfile`, and names the book and Alexa skill. In Test chat it shares both public links when asked. |
+| “Why should we hire Edward for voice and chat?” | “How does his Alexa app work?” | Spock uses `SpockRecruiterQualifications`, explains that people can ask Alexa for rhymes, and connects the app and book to the role. |
+| “Send me both links.” | “Text, please.” In a new test choose email instead. | With link delivery enabled, Spock asks for the selected destination, reads it back, and waits for confirmation before calling `SpockSendRecruiterLinks`. Use your own test inbox and phone and verify receipt separately. |
 | “I’m hiring someone to modernize our Amazon Connect setup.” | “Actually, the role is mostly data engineering.” | Spock shifts from Enterprise Connect to AncestorIQ and explains a design choice from the new example. |
 | “What has Edward built with Kubernetes and CI/CD?” | “How did he secure a conversational AI backend?” | Spock describes Energy Transmission’s deployment and monitoring and then explains Maya’s authenticated webhook and secret handling. |
 | “I’m just here to see what you can do.” | “How was this voice assistant built?” | Spock guides the caller through the experience and explains the role of Amazon Connect and Designer. |
 
-## Messaging and launch
+## Send the recruiter links by text or email
 
-Both **caller email** and **caller SMS** are required for launch.
+Spock sends the book link, the Alexa app link, or both as requested. It asks the caller to choose a channel and reads back the destination before sending. If a caller changes the address, number, or channel, Spock confirms the new choice first. It reports a send after the provider accepts the request.
 
-- **Caller email.** Use Amazon SES to send a tailored recap and relevant case study. Ask for consent and read back the email address before sending. Test with a verified inbox and confirm SES production access for delivery to callers.
-- **Caller SMS.** Use AWS End User Messaging SMS with Amazon Connect. Set up a registered SMS sender and production access. Ask for consent, confirm the destination number, and send a short message with the relevant link.
+1. In Oregon (`us-west-2`), verify the sending address or domain in [Amazon SES](https://docs.aws.amazon.com/ses/latest/dg/creating-identities.html) and have a registered [AWS End User Messaging SMS](https://docs.aws.amazon.com/end-user-messaging/latest/userguide/nx-sms.html) number or pool ready. Verify your test recipients while the services are in their sandboxes. Request production access before allowing general callers to receive messages.
+2. Add these settings to the same `.spock.env` used by the conversation installer. `SPOCK_SES_IDENTITY` can be the verified address itself or its verified domain.
+
+   ```bash
+   SPOCK_AWS_ACCOUNT_ID=your-aws-account-id
+   SPOCK_SES_IDENTITY=example.com
+   SPOCK_SES_FROM_EMAIL=spock@example.com
+   SPOCK_SMS_ORIGINATION_ARN=arn:aws:sms-voice:us-west-2:123456789012:phone-number/phone-example
+   ```
+
+3. Use an AWS CLI profile for that account with CloudFormation change set and stack provisioning permissions. Use a Designer key with access to secrets, data requests, flows, and builds. Run the installer with delivery enabled.
+
+   ```bash
+   bash spock-conversations.sh --with-link-delivery
+   ```
+
+4. Open the new build in Designer Test and confirm delivery once by text and once by email. Also try declining at readback and verify in the Debugger that the send tool stays idle.
+
+The delivery flag provisions [the link delivery stack](spock-link-delivery.yaml), checks the authenticated webhook without sending a message, and attaches the send tool to the recruiter route. Run the installer without the flag for a conversation-only build before enabling delivery. Once enabled, include the flag for later installs.
+
+## Launch checks
+
+- **Caller email and SMS.** Verify actual receipt on both channels. Client recaps and other follow-up links are separate from the recruiter delivery flow.
 - **Private owner summary.** Send a separate post-call summary with the caller’s purpose, needs, and any follow-up promised or sent.
 - **Voice validation.** Test the three paths on the dedicated Amazon Connect number before sharing it publicly.
 
