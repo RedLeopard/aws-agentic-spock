@@ -1,57 +1,54 @@
 # AWS Agentic Spock
 
-Spock is a voice-first Amazon Connect demo that turns a conversation into a real reservation. A caller can check the schedule, book a slot, ask how Spock works, and change the reservation in the same conversation. The booking reference stays the same when the time changes.
+Spock is a voice-first portfolio experience built with Amazon Connect and Agentic CX Designer. A prospective client can describe a business problem and hear an approach tailored to it. A recruiter can describe the work they’re hiring for and hear a matching project and the engineering decision behind it. Curious callers can explore the same projects in their own words.
 
-> “Book the first available slot. Before we change it, what’s powering this? Actually, move it to Thursday afternoon.”
+## Caller experiences
 
-## What’s implemented
+| Path | What Spock does |
+| --- | --- |
+| Potential client | Asks about the caller’s workflow, recommends a practical first step, and explains the benefit. Website chatbots, AI phone assistants, live-agent handoffs, automation, and full contact centers are all possible paths. |
+| Recruiter | Asks what the hire would own, looks up a relevant project, and explains a specific design choice. It adapts if the recruiter changes priorities. |
+| Live demo | Leads with a short choice of examples and follows the caller’s questions. A caller can switch topics or turn the walkthrough into a conversation about a real need. |
 
-- **Caller routing.** Spock opens with a greeting and recognizes potential clients, recruiters, and visitors who want to try the demo. If the intent is unclear, it asks a follow-up question.
-- **Live booking.** The `LiveDemo` flow uses three Designer data requests to check availability, create a reservation, and reschedule it. Spock reads back the proposed time and asks for confirmation before making a change.
-- **Reservation integrity.** DynamoDB transactions prevent two callers from claiming the same slot. A move reserves the new slot and releases the old one in a single transaction. Booking revisions protect against stale updates, and repeated requests resolve to the existing reservation.
+Each path can call three read-only Designer data requests. They contain public project facts and limits on what Spock can claim about each build.
 
-The demo calendar offers 30-minute weekday slots at 11 a.m. and 2 p.m. Eastern over a rolling 14-day window.
+| Case study | Example evidence |
+| --- | --- |
+| [Maya · Dialogflow CX Virtual Agent](https://github.com/RedLeopard/dialogflow-cx-virtual-agent) | Voice intake, confirmed press-1 transfer, and booking-link and owner-alert texts. |
+| [Project Enterprise Connect](https://github.com/RedLeopard/project-enterprise-connect) | Amazon Connect queue routing, real-time metrics, and call recordings in S3. |
+| [AncestorIQ](https://github.com/RedLeopard/AncestorIQ) | A FastAPI search application on Cloud Run, backed by a BigQuery index of historical records. |
 
-## Architecture
+## Install the conversations
 
-```mermaid
-flowchart TB
-    Connect["Amazon Connect"]
-    Designer["Agentic CX Designer · LiveDemo"]
-    API["API Gateway · Booking API"]
-    Lambda["Lambda · Reservation logic"]
-    DB["DynamoDB · Slots and reservations"]
+Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **AWS Agentic Spock** app in Oregon. The installer expects **SpockWelcome** as the welcome flow and the three original caller paths attached.
 
-    Connect --> Designer
-    Designer --> API
-    API --> Lambda
-    Lambda --> DB
-```
-
-CloudFormation provisions the booking stack in Oregon (`us-west-2`). A webhook credential stored in AWS Secrets Manager and referenced from Designer authenticates API calls.
-
-## Run the booking demo
-
-The installer expects an existing Agentic CX Designer app named **AWS Agentic Spock**, with **SpockWelcome** as its welcome flow and **LiveDemo** attached. You’ll need Node.js 20 or newer, AWS CLI v2 with access to the target account, and a Designer API key with workspace access.
-
-1. Create `.spock.env` next to the installer with your own AWS account ID, Designer workspace ID, and Designer application ID. The file is ignored by Git.
+1. Use the existing `.spock.env` in the repo folder. If you’re setting up a fresh clone, create it with your own Designer IDs. Git ignores this file.
 
    ```bash
-   SPOCK_AWS_ACCOUNT_ID=your-account-id
    SPOCK_WORKSPACE_ID=your-designer-workspace-id
    SPOCK_APPLICATION_ID=your-designer-application-id
    ```
 
-2. Run the installer from the project folder with the target AWS CLI profile active.
+2. Run the installer and enter your Designer API key at the hidden prompt.
 
    ```bash
-   bash spock-booking.sh
+   bash spock-conversations.sh
    ```
 
-   Enter your Designer API key at the hidden prompt. The installer checks the target account and app, deploys the stack, and tests the API with isolated reservations before wiring the tools into `LiveDemo` and creating a Designer build.
+3. Wait for `READY FOR DESIGNER TEST`, then open the app’s **Test** tab. This installer uses the Designer SDK to update the three caller paths and build the app for testing.
 
-3. When Terminal prints `READY FOR DESIGNER TEST`, open the app’s **Test** tab. Ask to try the demo, book and confirm a slot, ask what powers the experience, then request and confirm a different time. Verify that the same booking reference appears with the new slot and revision `2` in DynamoDB.
+## Try these conversations
 
-## In progress
+| Start with | Follow up with | What to verify |
+| --- | --- | --- |
+| “We miss calls after hours, and following up with leads takes too long.” | “We also need a person to pick up when it’s urgent.” | Spock addresses both issues, explains the live handoff, and retrieves Maya as a relevant example. |
+| “I’m hiring someone to modernize our Amazon Connect setup.” | “Actually, the role is mostly data engineering.” | Spock shifts from Enterprise Connect to AncestorIQ and explains a design choice from the new example. |
+| “I’m just here to see what you can do.” | “How was this voice assistant built?” | Spock guides the caller through the experience and explains the role of Amazon Connect and Designer. |
 
-The booking journey is the first end-to-end feature. The next pieces are portfolio-grounded client and recruiter conversations, opt-in SMS booking confirmations, and a private post-call summary.
+## Next milestones
+
+- Add one shared follow-up email tool using a verified sender. Ask for consent and confirm the address before sending a case study or recap.
+- Add opt-in SMS and a private summary for the owner.
+- Test the experience on the dedicated Amazon Connect number before sharing it publicly.
+
+The earlier demo reservation prototype is available in [spock-booking.sh](spock-booking.sh).
