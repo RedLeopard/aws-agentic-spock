@@ -113,6 +113,13 @@ const paths = [
       'Suggest one practical first step that fits their current tools and describe the benefit in business terms. Offer a way to measure the improvement without promising numbers.',
       'When the caller describes multiple issues, connect them where appropriate. For missed calls and slow lead follow-up, explain how phone intake can capture what a caller needs and trigger follow-up while giving people a live handoff when appropriate.',
     ],
+    refinements: [
+      'Carry forward the business goals the caller has already stated. A correction about where inquiries come in changes the channel, while the original follow-up problem still needs a solution.',
+      'Give the answer first and end with at most one discovery question. A question joined by "and" that asks for two answers still counts as two questions. Ask about the workflow or a decision that changes the design. Save traffic counts, wait times, and other sizing questions for a caller who asks about scale or measurement.',
+      'When you have enough detail to recommend a design, retrieve a relevant case-study tool and briefly explain the part that applies. For lead follow-up or human handoff, call SpockMayaCase. If the new design is website chat, identify Maya as a phone example and explain how its handoff or follow-up pattern could be adapted to chat.',
+      'When urgency matters, explain that an available agent can receive the conversation, and suggest a priority callback request or team alert when nobody is available. Ask one question about who handles urgent requests or what should trigger a handoff. Use conditional language for expected benefits.',
+      'Example: A caller needs faster lead follow-up, then says most inquiries come from the website and urgent cases need a person. Call SpockMayaCase. Explain that a chatbot can log the inquiry and alert the team to follow up. Relate Maya\'s phone handoff to routing urgent chats with their conversation, and ask who would handle those after hours.',
+    ],
   },
   {
     id: 'Recruiter',
@@ -169,7 +176,7 @@ function nodeId(flowId, label) {
     '8' + hash.slice(17, 20), hash.slice(20, 32)].join('-');
 }
 
-function flowSpec(path) {
+function flowSpec(path, refinements = []) {
   const nodes = {};
   const id = (label) => nodeId(path.id, label);
   const link = (label, name = 'next', conditions = []) => ({ nodeId: id(label), name, conditions });
@@ -196,7 +203,7 @@ function flowSpec(path) {
     metadata: {
       generativeJourney: {
         modelType: 'amazon-nova-2-lite',
-        prompt: [...path.guidance, ...shared].join('\n'),
+        prompt: [...path.guidance, ...shared, ...refinements].join('\n'),
         enableZeroTurnMode: false,
         maxSteps: 10,
         maxTokens: 2048,
@@ -211,24 +218,52 @@ function flowSpec(path) {
   add('end', 'terminate', 300, 670, { childNodes: [] });
   return {
     flowIdentifier: path.id, nodes, aiDescription: path.intent, untrained: false,
-    description: 'Spock portfolio conversation v1: ' + path.id,
+    description: 'Spock portfolio conversation v' + (refinements.length ? '2: ' : '1: ') + path.id,
   };
 }
 
-function inspectFlow(path, flow, spec) {
+function matchesJourney(flow, spec) {
+  const journeyId = nodeId(spec.flowIdentifier, 'portfolioJourney');
+  const journey = flow.nodes?.[journeyId]?.metadata?.generativeJourney;
+  const desired = spec.nodes[journeyId].metadata.generativeJourney;
+  return flow.description === spec.description && flow.aiDescription === spec.aiDescription &&
+    journey?.prompt === desired.prompt && journey.modelType === desired.modelType &&
+    JSON.stringify(journey.tools?.map((tool) => tool.dataRequest?.dataRequestId)) ===
+      JSON.stringify(cases.map(({ id: dataRequestId }) => dataRequestId));
+}
+
+function inspectFlow(path, flow, spec, originalSpec) {
+  if (matchesJourney(flow, spec)) return 'installed';
+  if (originalSpec !== spec && matchesJourney(flow, originalSpec)) return 'upgrade';
   const id = (label) => nodeId(path.id, label);
-  const journey = flow.nodes?.[id('portfolioJourney')]?.metadata?.generativeJourney;
-  const desired = spec.nodes[id('portfolioJourney')].metadata.generativeJourney;
-  if (flow.description === spec.description && flow.aiDescription === spec.aiDescription &&
-      journey?.prompt === desired.prompt && journey.modelType === desired.modelType &&
-      JSON.stringify(journey.tools?.map((tool) => tool.dataRequest?.dataRequestId)) ===
-        JSON.stringify(cases.map(({ id: dataRequestId }) => dataRequestId))) return true;
   if (flow.description === 'Spock caller route: ' + path.id &&
       Object.keys(flow.nodes ?? {}).length === 3 &&
       flow.nodes[id('start')]?.type === 'start' &&
       flow.nodes[id('reply')]?.messages?.[0]?.body === path.originalReply &&
-      ['end', 'terminate'].includes(flow.nodes[id('end')]?.type)) return false;
-  throw new Error(path.id + ' differs from the original Spock route. Review it before installing.');
+      ['end', 'terminate'].includes(flow.nodes[id('end')]?.type)) return 'placeholder';
+  throw new Error(path.id + ' differs from the supported Spock routes. Review it before installing.');
+}
+
+function refineJourney(flow, spec) {
+  const journeyId = nodeId(spec.flowIdentifier, 'portfolioJourney');
+  const node = flow.nodes[journeyId];
+  return {
+    flowIdentifier: spec.flowIdentifier,
+    description: spec.description,
+    nodes: {
+      ...flow.nodes,
+      [journeyId]: {
+        ...node,
+        metadata: {
+          ...node.metadata,
+          generativeJourney: {
+            ...node.metadata.generativeJourney,
+            prompt: spec.nodes[journeyId].metadata.generativeJourney.prompt,
+          },
+        },
+      },
+    },
+  };
 }
 
 const revisionOf = (flow) => flow.saveId ?? String(flow.updatedAt);
@@ -259,9 +294,10 @@ try {
 
   const updates = [];
   for (const path of paths) {
-    const spec = flowSpec(path);
+    const originalSpec = flowSpec(path);
+    const spec = path.refinements ? flowSpec(path, path.refinements) : originalSpec;
     const original = await send(GetFlowCommand, { flowIdentifier: path.id });
-    updates.push({ spec, original, installed: inspectFlow(path, original, spec) });
+    updates.push({ spec, original, state: inspectFlow(path, original, spec, originalSpec) });
   }
   const presentCases = new Set();
   for (const entry of cases) {
@@ -285,12 +321,16 @@ try {
 
   phase = 'Installing the caller journeys';
   const revisions = [];
-  for (const { spec, original, installed } of updates) {
+  for (const { spec, original, state } of updates) {
     const current = await send(GetFlowCommand, { flowIdentifier: spec.flowIdentifier });
     if (revisionOf(original) !== revisionOf(current)) {
       throw new Error(spec.flowIdentifier + ' changed while the installer was running. Recheck it before retrying.');
     }
-    const saved = installed ? current : await send(UpdateFlowCommand, spec);
+    let saved = current;
+    if (state !== 'installed') {
+      const change = state === 'upgrade' ? refineJourney(current, spec) : spec;
+      saved = await send(UpdateFlowCommand, change);
+    }
     revisions.push(revisionOf(saved));
     console.log('Ready ' + spec.flowIdentifier);
   }
