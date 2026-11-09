@@ -35,7 +35,13 @@ Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **A
    SPOCK_APPLICATION_ID=your-designer-application-id
    ```
 
-2. Run the installer and enter your Designer API key at the hidden prompt.
+2. Run the installer. It reads your Designer API key from macOS Keychain if available, or asks for it at a hidden prompt. To save or update the key on your Mac, run this once and enter the key when `security` prompts you.
+
+   ```bash
+   security add-generic-password -U -a "$(id -un)" -s 'Spock Designer API' -w
+   ```
+
+   Then run the installer.
 
    ```bash
    bash spock-conversations.sh

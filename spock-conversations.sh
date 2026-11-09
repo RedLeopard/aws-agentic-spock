@@ -31,12 +31,17 @@ elif [[ $# -gt 0 ]]; then
   exit 1
 fi
 
+# Keep the Designer credential out of dependency installation.
+export -n ACXD_API_KEY
 node -e 'if (Number(process.versions.node.split(".")[0]) < 20) { console.error("Node.js 20 or newer is required."); process.exit(1); }'
 spock_tmp="$(mktemp -d)"
 trap 'rm -rf -- "$spock_tmp"' EXIT
 cd "$spock_tmp"
 npm install --no-audit --no-fund amazon-connect-acxd-sdk@0.3.0
 
+if [[ -z "${ACXD_API_KEY:-}" && "$(uname -s)" == Darwin ]]; then
+  ACXD_API_KEY="$(/usr/bin/security find-generic-password -a "$(id -un)" -s 'Spock Designer API' -w 2>/dev/null)" || ACXD_API_KEY=
+fi
 if [[ -z "${ACXD_API_KEY:-}" ]]; then
   read -r -s -p 'Spock API key (hidden): ' ACXD_API_KEY </dev/tty
   printf '\n'
@@ -45,9 +50,7 @@ if [[ "$ACXD_API_KEY" != acxd_live_*.* ]]; then
   echo "Enter the full Designer API key for spock-deploy." >&2
   exit 1
 fi
-export ACXD_API_KEY
-
-node --input-type=module <<'SPOCK_DESIGNER'
+ACXD_API_KEY="$ACXD_API_KEY" node --input-type=module <<'SPOCK_DESIGNER'
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -70,6 +73,7 @@ import {
 
 const applicationIdentifier = process.env.SPOCK_APPLICATION_ID;
 const apiKey = process.env.ACXD_API_KEY;
+delete process.env.ACXD_API_KEY;
 const deliveryMode = process.env.SPOCK_LINK_DELIVERY_MODE;
 const emailOnly = deliveryMode === 'email';
 const withLinkDelivery = emailOnly || deliveryMode === 'both';
