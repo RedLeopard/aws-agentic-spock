@@ -18,6 +18,10 @@ Each path can call three read-only Designer data requests. They contain public p
 | [Project Enterprise Connect](https://github.com/RedLeopard/project-enterprise-connect) | Amazon Connect queue routing, real-time metrics, and call recordings in S3. |
 | [AncestorIQ](https://github.com/RedLeopard/AncestorIQ) | A FastAPI search application on Cloud Run, backed by a BigQuery index of historical records. |
 
+## Designer checkpoint
+
+The conversation installer built all three caller paths and loaded the portfolio case studies. In the initial client test, Spock switched from an after-hours phone assistant to website chat when the caller corrected where inquiries come in. The revised build prompts Spock to retain the lead follow-up goal, use the Maya case where it fits, and ask one question about the workflow. It also covers the fallback for urgent chats when an agent is unavailable.
+
 ## Install the conversations
 
 Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **AWS Agentic Spock** app in Oregon. The installer expects **SpockWelcome** as the welcome flow and the three original caller paths attached.
@@ -41,14 +45,17 @@ Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **A
 
 | Start with | Follow up with | What to verify |
 | --- | --- | --- |
-| “We miss calls after hours, and following up with leads takes too long.” | “We also need a person to pick up when it’s urgent.” | Spock addresses both issues, explains the live handoff, and retrieves Maya as a relevant example. |
+| “I’m a potential client. We miss calls after hours, and following up with leads takes too long.” | “Actually, most of our inquiries come through the website. We still want customers to reach a live person when it’s urgent.” | Spock pivots to website chat, explains how leads get logged and followed up, and describes the urgent handoff and fallback. It asks one question and relates Maya’s phone workflow where relevant. |
 | “I’m hiring someone to modernize our Amazon Connect setup.” | “Actually, the role is mostly data engineering.” | Spock shifts from Enterprise Connect to AncestorIQ and explains a design choice from the new example. |
 | “I’m just here to see what you can do.” | “How was this voice assistant built?” | Spock guides the caller through the experience and explains the role of Amazon Connect and Designer. |
 
-## Next milestones
+## Messaging and launch
 
-- Add one shared follow-up email tool using a verified sender. Ask for consent and confirm the address before sending a case study or recap.
-- Add opt-in SMS and a private summary for the owner.
-- Test the experience on the dedicated Amazon Connect number before sharing it publicly.
+Both **caller email** and **caller SMS** are required for launch.
 
-The earlier demo reservation prototype is available in [spock-booking.sh](spock-booking.sh).
+- **Caller email.** Use Amazon SES to send a tailored recap and relevant case study. Ask for consent and read back the email address before sending. Test with a verified inbox and confirm SES production access for delivery to callers.
+- **Caller SMS.** Use AWS End User Messaging SMS with Amazon Connect. Set up a registered SMS sender and production access. Ask for consent, confirm the destination number, and send a short message with the relevant link.
+- **Private owner summary.** Send a separate post-call summary with the caller’s purpose, needs, and any follow-up promised or sent.
+- **Voice validation.** Test the three paths on the dedicated Amazon Connect number before sharing it publicly.
+
+The earlier demo reservation prototype is available in [spock-booking.sh](spock-booking.sh). The current experience focuses on client discovery, relevant portfolio examples, and follow-up.
