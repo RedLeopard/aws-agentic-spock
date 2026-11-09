@@ -26,6 +26,16 @@ The recruiter route also uses a public qualifications profile. It includes [Voic
 
 The conversation installer built all three caller paths and loaded the portfolio case studies. In the initial client test, Spock switched from an after-hours phone assistant to website chat when the caller corrected where inquiries come in. The revised build prompts Spock to retain the lead follow-up goal, use the Maya case where it fits, and ask one question about the workflow. It also covers the fallback for urgent chats when an agent is unavailable.
 
+### November 9, 2026 milestone
+
+Built the email-only recruiter journey in Designer build `6dd2adbc-38ea-4f1d-a2f7-d25bfde2bcec`. The update adds a short portfolio sample offer and a chat fallback for rejected email. The SES sender is verified in Oregon, and the v2 delivery webhook passed the installer checks. The latest Designer chat repeated the confirmation prompt after “yes,” so email receipt is still unverified. The Connect phone number is configured for calls, and SMS sender setup is pending.
+
+**Pick up here**
+
+1. Register a US toll-free SMS sender in AWS End User Messaging in Oregon. Use public Privacy Policy and Terms and Conditions URLs. Once approved, confirm that an AWS text reaches your phone.
+2. Fix Spock’s confirmation loop. One explicit “yes” after the address or number readback should trigger one send. Use plain names for the samples and report the actual provider result.
+3. Add the approved sender ARN to the delivery stack, then rebuild with `--with-link-delivery`. Verify text and email receipt in separate Spock sessions before opening delivery to recruiters.
+
 ## Install the conversations
 
 Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **AWS Agentic Spock** app in Oregon. The installer expects **SpockWelcome** as the welcome flow, **SpockClarify** in the workspace, and the three original caller paths attached. The key needs application write access to assign the Unknown flow on the first run.
@@ -70,7 +80,7 @@ Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **A
 
 Spock offers the Amazon Connect and Dialogflow CX case studies for CX hiring questions. It can also send the full portfolio or the book and Alexa app links on request. It reads back the destination and what it will send, then waits for confirmation. If a caller changes the address, number, or channel, Spock confirms the new choice first. The send tool returns a status and a provider receipt ID on acceptance. Confirm actual receipt separately.
 
-### Test email first
+### Configure email delivery
 
 1. In Oregon (`us-west-2`), verify the sending address or domain in [Amazon SES](https://docs.aws.amazon.com/ses/latest/dg/creating-identities.html). If SES is in its sandbox, verify the test inbox too. The SES checks need `ses:GetAccount` and `ses:ListEmailIdentities`. The installer reads the selected identity with `ses:GetEmailIdentity`.
 2. Add these settings to the same `.spock.env` used by the conversation installer. `SPOCK_SES_IDENTITY` can be the verified address itself or its verified domain.
