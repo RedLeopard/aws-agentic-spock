@@ -11,18 +11,23 @@ fi
 : "${SPOCK_APPLICATION_ID:?Set SPOCK_APPLICATION_ID in .spock.env}"
 export SPOCK_WORKSPACE_ID SPOCK_APPLICATION_ID
 export SPOCK_INSTALLER_ROOT="$spock_root"
-export SPOCK_WITH_LINK_DELIVERY=0
+export SPOCK_LINK_DELIVERY_MODE=off
 
-if [[ $# -eq 1 && "$1" == --with-link-delivery ]]; then
+if [[ $# -eq 1 && ( "$1" == --with-email-delivery || "$1" == --with-link-delivery ) ]]; then
   : "${SPOCK_AWS_ACCOUNT_ID:?Set SPOCK_AWS_ACCOUNT_ID in .spock.env}"
   : "${SPOCK_SES_IDENTITY:?Set SPOCK_SES_IDENTITY in .spock.env}"
   : "${SPOCK_SES_FROM_EMAIL:?Set SPOCK_SES_FROM_EMAIL in .spock.env}"
-  : "${SPOCK_SMS_ORIGINATION_ARN:?Set SPOCK_SMS_ORIGINATION_ARN in .spock.env}"
   command -v aws >/dev/null || { echo "Install the AWS CLI to enable link delivery." >&2; exit 1; }
-  export SPOCK_AWS_ACCOUNT_ID SPOCK_SES_IDENTITY SPOCK_SES_FROM_EMAIL SPOCK_SMS_ORIGINATION_ARN
-  export SPOCK_WITH_LINK_DELIVERY=1
+  export SPOCK_AWS_ACCOUNT_ID SPOCK_SES_IDENTITY SPOCK_SES_FROM_EMAIL
+  if [[ "$1" == --with-link-delivery ]]; then
+    : "${SPOCK_SMS_ORIGINATION_ARN:?Set SPOCK_SMS_ORIGINATION_ARN in .spock.env}"
+    export SPOCK_SMS_ORIGINATION_ARN
+    export SPOCK_LINK_DELIVERY_MODE=both
+  else
+    export SPOCK_LINK_DELIVERY_MODE=email
+  fi
 elif [[ $# -gt 0 ]]; then
-  echo "Usage: bash spock-conversations.sh [--with-link-delivery]" >&2
+  echo "Usage: bash spock-conversations.sh [--with-email-delivery | --with-link-delivery]" >&2
   exit 1
 fi
 
@@ -65,7 +70,9 @@ import {
 
 const applicationIdentifier = process.env.SPOCK_APPLICATION_ID;
 const apiKey = process.env.ACXD_API_KEY;
-const withLinkDelivery = process.env.SPOCK_WITH_LINK_DELIVERY === '1';
+const deliveryMode = process.env.SPOCK_LINK_DELIVERY_MODE;
+const emailOnly = deliveryMode === 'email';
+const withLinkDelivery = emailOnly || deliveryMode === 'both';
 const region = 'us-west-2';
 const client = new AgenticCXDesignerClient({
   region,
@@ -155,7 +162,7 @@ const linkTool = {
   requestSchema: {
     type: 'object',
     properties: {
-      channel: { type: 'string', enum: ['sms', 'email'], description: 'The single channel the caller chose.' },
+      channel: { type: 'string', enum: emailOnly ? ['email'] : ['sms', 'email'], description: 'The single channel the caller chose.' },
       destination: { type: 'string', description: 'The confirmed email address or phone number in +country-code format.' },
       selection: { type: 'string', enum: ['book', 'alexa', 'both'], description: 'Which public links the caller confirmed.' },
       confirmed: { type: 'boolean', description: 'True only after the caller says yes to the channel, links, and destination you read back.' },
@@ -169,12 +176,21 @@ const linkTool = {
   },
 };
 
-const linkDeliveryGuidance = [
+const sendConfirmation = 'Only after that confirmation, call SpockSendRecruiterLinks once for that choice. Send the book, the Alexa app, or both as requested. If the tool returns accepted, say you sent the requested links. If it returns already_accepted, say that request was already sent. In both cases, describe the send without claiming the links arrived.';
+const deliveryScope = 'This delivery tool sends the two public links only. Share other public portfolio links in chat or point voice callers to hire Edward Thornton dot click. For booking or transfer requests, direct callers to the portfolio contact page.';
+const bothDeliveryGuidance = [
   'When the caller is interested in the book or Alexa app, ask “Would you like me to text or email you the links?” Use “the link” for a single item. If they already chose a channel, ask for their own number or address for that channel.',
   'Collect only the selected destination. For SMS, use the confirmed number with its country code. For email, clarify spelling when needed. Read back the destination, channel, and which links you will send, then wait for a clear yes. A correction, channel change, or selection change needs a fresh readback and confirmation. Treat a no, unrelated reply, or silence as no permission to send.',
-  'Only after that confirmation, call SpockSendRecruiterLinks once for that choice. Send the book, the Alexa app, or both as requested. If the tool returns accepted, say you sent the requested links. If it returns already_accepted, say that request was already sent. In both cases, describe the send without claiming the links arrived.',
+  sendConfirmation,
   'On invalid_destination, ask the caller to correct it and confirm again. On any other failure or uncertain result, say you could not confirm the send and offer the links in chat or at hire Edward Thornton dot click. Ask for a fresh channel choice and confirmation before trying a different destination or channel. Avoid automatic retries.',
-  'This delivery tool sends the two public links only. Share other public portfolio links in chat or point voice callers to hire Edward Thornton dot click. For booking or transfer requests, direct callers to the portfolio contact page.',
+  deliveryScope,
+];
+const emailDeliveryGuidance = [
+  'Offer to email the requested book or Alexa app links. If the caller requests text, offer email or the portfolio instead. Ask only for an email address the caller controls.',
+  'Clarify the address spelling when needed. Read back the email address and which links you will send, then wait for a clear yes. A correction or change to the links needs a new readback and confirmation. Treat a no, unrelated reply, or silence as no permission to send.',
+  sendConfirmation,
+  'On invalid_destination, ask the caller to correct the email address and confirm again. On any other failure or uncertain result, say you could not confirm the send and offer the links in chat or at hire Edward Thornton dot click. Avoid automatic retries.',
+  deliveryScope,
 ];
 
 const paths = [
@@ -265,7 +281,7 @@ function nodeId(flowId, label) {
     '8' + hash.slice(17, 20), hash.slice(20, 32)].join('-');
 }
 
-function flowSpec(path, { version = 1, refinements = [], extraTools = [], linkDelivery = false } = {}) {
+function flowSpec(path, { version = 1, refinements = [], extraTools = [], linkDelivery } = {}) {
   const nodes = {};
   const id = (label) => nodeId(path.id, label);
   const link = (label, name = 'next', conditions = []) => ({ nodeId: id(label), name, conditions });
@@ -280,7 +296,8 @@ function flowSpec(path, { version = 1, refinements = [], extraTools = [], linkDe
   });
 
   const guidance = linkDelivery ? shared.filter((line) => line !== sharingWithoutDelivery) : shared;
-  const prompt = [...path.guidance, ...guidance, ...refinements, ...(linkDelivery ? linkDeliveryGuidance : [])];
+  const deliveryGuidance = { email: emailDeliveryGuidance, both: bothDeliveryGuidance }[linkDelivery] ?? [];
+  const prompt = [...path.guidance, ...guidance, ...refinements, ...deliveryGuidance];
   const tools = [...cases, ...extraTools, ...(linkDelivery ? [linkTool] : [])];
   add('start', 'start', 300, 40, { childNodes: [link('portfolioJourney')] });
   add('portfolioJourney', 'generative_journey', 300, 210, {
@@ -328,10 +345,10 @@ function journeySignature(flow, flowId) {
 // Fingerprint of the first recruiter profile build for callers who already installed it.
 const priorRecruiter = '7374c6dc58065a5ab1f00293d80538765cd8c87f3d4bc478d8eefb616b053ef1';
 
-function inspectFlow(path, flow, spec, standardSpec, originalSpec) {
+function inspectFlow(path, flow, spec, supported) {
   const current = journeySignature(flow, path.id);
   if (current === journeySignature(spec, path.id)) return 'installed';
-  if (current === journeySignature(originalSpec, path.id) || current === journeySignature(standardSpec, path.id) ||
+  if (supported.some((version) => current === journeySignature(version, path.id)) ||
       (path.id === 'Recruiter' && current === priorRecruiter)) return 'upgrade';
   const id = (label) => nodeId(path.id, label);
   if (flow.description === 'Spock caller route: ' + path.id &&
@@ -400,11 +417,9 @@ function deployLinkApi() {
   const account = process.env.SPOCK_AWS_ACCOUNT_ID;
   const identity = process.env.SPOCK_SES_IDENTITY;
   const from = process.env.SPOCK_SES_FROM_EMAIL;
-  const smsArn = process.env.SPOCK_SMS_ORIGINATION_ARN;
+  const smsArn = emailOnly ? '' : process.env.SPOCK_SMS_ORIGINATION_ARN;
   const activeAccount = aws(['sts', 'get-caller-identity', '--query', 'Account', '--output', 'text']);
   check(/^\d{12}$/.test(account) && activeAccount === account, 'Select the AWS CLI profile for the Spock AWS account.');
-  check(new RegExp('^arn:aws:sms-voice:' + region + ':' + account + ':(phone-number|pool)/[A-Za-z0-9-]+$').test(smsArn),
-    'Use an SMS phone number or pool ARN in the Spock account and Oregon.');
   const verifiedIdentity = identity.toLowerCase();
   const domain = from.split('@').at(-1).toLowerCase();
   check(/^[^@\s,]+@[^@\s,]+$/.test(from) &&
@@ -413,23 +428,31 @@ function deployLinkApi() {
   check(aws(['sesv2', 'get-email-identity', '--email-identity', identity, '--query',
     'VerifiedForSendingStatus', '--output', 'text']).toLowerCase() === 'true',
     'Verify the SES sending identity in Oregon before enabling link delivery.');
-  const phone = smsArn.includes(':phone-number/');
-  const smsIdentity = JSON.parse(aws([
-    'pinpoint-sms-voice-v2', phone ? 'describe-phone-numbers' : 'describe-pools',
-    phone ? '--phone-number-ids' : '--pool-ids', smsArn.split('/').at(-1),
-    '--query', phone ? 'PhoneNumbers[0]' : 'Pools[0]', '--output', 'json',
-  ]));
-  check(smsIdentity?.Status === 'ACTIVE' && (!phone || smsIdentity.NumberCapabilities?.includes('SMS')),
-    'Use an active SMS-capable number or SMS pool in Oregon.');
+  const parameters = ['SesIdentity=' + identity, 'SesFromEmail=' + from];
+  if (!emailOnly) {
+    check(new RegExp('^arn:aws:sms-voice:' + region + ':' + account + ':(phone-number|pool)/[A-Za-z0-9-]+$').test(smsArn),
+      'Use an SMS phone number or pool ARN in the Spock account and Oregon.');
+    const phone = smsArn.includes(':phone-number/');
+    const smsIdentity = JSON.parse(aws([
+      'pinpoint-sms-voice-v2', phone ? 'describe-phone-numbers' : 'describe-pools',
+      phone ? '--phone-number-ids' : '--pool-ids', smsArn.split('/').at(-1),
+      '--query', phone ? 'PhoneNumbers[0]' : 'Pools[0]', '--output', 'json',
+    ]));
+    check(smsIdentity?.Status === 'ACTIVE' && (!phone || smsIdentity.NumberCapabilities?.includes('SMS')),
+      'Use an active SMS-capable number or SMS pool in Oregon.');
+    parameters.push('SmsOriginationArn=' + smsArn);
+  }
   const existing = readStack();
   const tags = Object.fromEntries((existing?.Tags ?? []).map(({ Key, Value }) => [Key, Value]));
   check(!existing || (tags.Project === 'aws-agentic-spock' && tags.Component === 'link-delivery'),
     'A different CloudFormation stack uses the Spock link delivery name.');
+  const existingSms = existing?.Parameters?.find(({ ParameterKey }) => ParameterKey === 'SmsOriginationArn')?.ParameterValue;
+  check(!emailOnly || !existingSms, 'Text delivery is configured in the stack. Rerun with --with-link-delivery.');
 
   aws([
     'cloudformation', 'deploy', '--template-file', join(process.env.SPOCK_INSTALLER_ROOT, 'spock-link-delivery.yaml'),
     '--stack-name', stackName, '--capabilities', 'CAPABILITY_IAM', '--no-fail-on-empty-changeset',
-    '--parameter-overrides', 'SesIdentity=' + identity, 'SesFromEmail=' + from, 'SmsOriginationArn=' + smsArn,
+    '--parameter-overrides', ...parameters,
     '--tags', 'Project=aws-agentic-spock', 'Component=link-delivery',
   ], true);
   const outputs = Object.fromEntries(readStack().Outputs.map(({ OutputKey, OutputValue }) => [OutputKey, OutputValue]));
@@ -478,7 +501,10 @@ async function installLinkDelivery() {
   };
   if (!existing) return send(CreateDataRequestCommand, { dataRequestId: linkTool.id, ...config });
   const webhook = existing.webhook;
-  if (existing.sensitive !== true || webhook?.implementation !== 'external' || webhook.method !== 'POST' ||
+  const currentChannels = existing.requestSchema?.properties?.channel?.enum;
+  const desiredChannels = linkTool.requestSchema.properties.channel.enum;
+  if (JSON.stringify(currentChannels) !== JSON.stringify(desiredChannels) ||
+      existing.sensitive !== true || webhook?.implementation !== 'external' || webhook.method !== 'POST' ||
       webhook.sendContext !== false || webhook.url !== url || webhook.environments?.development?.url !== url ||
       webhook.environments?.production?.url !== url) {
     return send(UpdateDataRequestCommand, { dataRequestIdentifier: linkTool.id, ...config });
@@ -515,14 +541,20 @@ try {
     const originalSpec = flowSpec(path);
     const standardSpec = path.refinements ? flowSpec(path, { ...path, version: path.version ?? 2 }) : originalSpec;
     const recruiter = path.id === 'Recruiter';
+    const emailSpec = recruiter ? flowSpec(path, { ...path, version: '4-email', linkDelivery: 'email' }) : null;
     const spec = recruiter && withLinkDelivery
-      ? flowSpec(path, { ...path, version: 4, linkDelivery: true })
+      ? (emailOnly ? emailSpec : flowSpec(path, { ...path, version: 4, linkDelivery: 'both' }))
       : standardSpec;
     const original = await send(GetFlowCommand, { flowIdentifier: path.id });
-    if (recruiter && !withLinkDelivery && original.description === 'Spock portfolio conversation v4: Recruiter') {
+    if (recruiter && deliveryMode !== 'both' && original.description === 'Spock portfolio conversation v4: Recruiter') {
       throw new Error('Recruiter link delivery is installed. Rerun with --with-link-delivery to update it.');
     }
-    updates.push({ spec, original, state: inspectFlow(path, original, spec, standardSpec, originalSpec) });
+    if (recruiter && !withLinkDelivery && original.description === emailSpec.description) {
+      throw new Error('Recruiter email delivery is installed. Rerun with --with-email-delivery to update it.');
+    }
+    const supported = [originalSpec, standardSpec];
+    if (recruiter && deliveryMode === 'both') supported.push(emailSpec);
+    updates.push({ spec, original, state: inspectFlow(path, original, spec, supported) });
   }
   const dataRequests = [...cases, recruiterProfile];
   const presentRequests = new Set();

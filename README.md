@@ -58,25 +58,36 @@ Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **A
 
 Spock sends the book link, the Alexa app link, or both as requested. It asks the caller to choose a channel and reads back the destination before sending. If a caller changes the address, number, or channel, Spock confirms the new choice first. It reports a send after the provider accepts the request.
 
-1. In Oregon (`us-west-2`), verify the sending address or domain in [Amazon SES](https://docs.aws.amazon.com/ses/latest/dg/creating-identities.html) and have a registered [AWS End User Messaging SMS](https://docs.aws.amazon.com/end-user-messaging/latest/userguide/nx-sms.html) number or pool ready. Verify your test recipients while the services are in their sandboxes. Request production access before allowing general callers to receive messages.
+### Test email first
+
+1. In Oregon (`us-west-2`), verify the sending address or domain in [Amazon SES](https://docs.aws.amazon.com/ses/latest/dg/creating-identities.html). If SES is in its sandbox, verify the test inbox too. The SES checks need `ses:GetAccount` and `ses:ListEmailIdentities`. The installer reads the selected identity with `ses:GetEmailIdentity`.
 2. Add these settings to the same `.spock.env` used by the conversation installer. `SPOCK_SES_IDENTITY` can be the verified address itself or its verified domain.
 
    ```bash
    SPOCK_AWS_ACCOUNT_ID=your-aws-account-id
    SPOCK_SES_IDENTITY=example.com
    SPOCK_SES_FROM_EMAIL=spock@example.com
+   ```
+
+3. Use an AWS CLI profile for that account with CloudFormation change set and stack provisioning permissions. Use a Designer key with access to secrets, data requests, flows, and builds. Run the email test installer.
+
+   ```bash
+   bash spock-conversations.sh --with-email-delivery
+   ```
+
+4. Open the new build in Designer Test and confirm delivery to your own inbox. Also try declining at readback and verify in the Debugger that the send tool stays idle.
+
+### Add text delivery
+
+1. In Oregon, register an [AWS End User Messaging SMS](https://docs.aws.amazon.com/end-user-messaging/latest/userguide/nx-sms.html) number or pool and verify your test number if the account is in the SMS sandbox. Add the sender ARN to `.spock.env`.
+
+   ```bash
    SPOCK_SMS_ORIGINATION_ARN=arn:aws:sms-voice:us-west-2:123456789012:phone-number/phone-example
    ```
 
-3. Use an AWS CLI profile for that account with CloudFormation change set and stack provisioning permissions. Use a Designer key with access to secrets, data requests, flows, and builds. Run the installer with delivery enabled.
+2. Run `bash spock-conversations.sh --with-link-delivery` to upgrade the same stack and recruiter route. In Designer Test, choose text and verify receipt on your test phone. Request production access for SES and SMS before opening delivery to general callers.
 
-   ```bash
-   bash spock-conversations.sh --with-link-delivery
-   ```
-
-4. Open the new build in Designer Test and confirm delivery once by text and once by email. Also try declining at readback and verify in the Debugger that the send tool stays idle.
-
-The delivery flag provisions [the link delivery stack](spock-link-delivery.yaml), checks the authenticated webhook without sending a message, and attaches the send tool to the recruiter route. Run the installer without the flag for a conversation-only build before enabling delivery. Once enabled, include the flag for later installs.
+Either delivery flag provisions [the link delivery stack](spock-link-delivery.yaml), checks the authenticated webhook without sending a message, and attaches the send tool to the recruiter route. For a conversation-only build, run the installer without a flag before enabling delivery. Once enabled, include the flag for the enabled mode or upgrade from email to both channels.
 
 ## Launch checks
 

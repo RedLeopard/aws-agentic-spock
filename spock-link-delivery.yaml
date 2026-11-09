@@ -9,8 +9,11 @@ Parameters:
     Description: Email address Spock sends from
   SmsOriginationArn:
     Type: String
-    Description: ARN of the registered SMS number or pool in us-west-2
-    AllowedPattern: 'arn:aws:sms-voice:us-west-2:[0-9]{12}:(phone-number|pool)/[A-Za-z0-9-]+'
+    Description: ARN of the registered SMS number or pool in us-west-2, or blank for email-only testing
+    Default: ''
+    AllowedPattern: '(arn:aws:sms-voice:us-west-2:[0-9]{12}:(phone-number|pool)/[A-Za-z0-9-]+)?'
+Conditions:
+  HasSmsSender: !Not [!Equals [!Ref SmsOriginationArn, '']]
 Resources:
   WebhookKey:
     Type: AWS::SecretsManager::Secret
@@ -58,9 +61,12 @@ Resources:
                 Condition:
                   StringEquals:
                     'ses:FromAddress': !Ref SesFromEmail
-              - Effect: Allow
-                Action: sms-voice:SendTextMessage
-                Resource: !Ref SmsOriginationArn
+              - !If
+                - HasSmsSender
+                - Effect: Allow
+                  Action: sms-voice:SendTextMessage
+                  Resource: !Ref SmsOriginationArn
+                - !Ref AWS::NoValue
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource: !Ref WebhookKey
@@ -218,6 +224,8 @@ Resources:
                   if not all(isinstance(value, str) for value in (channel, destination, selection)) or selection not in LINKS:
                       return respond("invalid_request")
                   if channel == "sms":
+                      if not os.environ["SMS_ORIGINATION_ARN"]:
+                          return respond("channel_unavailable")
                       valid = PHONE.fullmatch(destination)
                   elif channel == "email":
                       valid = len(destination) <= 254 and len(destination.partition("@")[0]) <= 64 and EMAIL.fullmatch(destination)
