@@ -216,7 +216,7 @@ const paths = [
     version: 3,
     originalReply: 'Got it. You’re calling about hiring. This is Spock’s recruiter path.',
     intent: 'Use when the caller is hiring, recruiting, evaluating a candidate, discussing a job, or asks about Edward Thornton for a role.',
-    refinedIntent: 'Use for hiring or job discussions and direct questions about Edward Thornton’s qualifications, professional experience, credentials, books, or Alexa skill.',
+    refinedIntent: 'Use for hiring inquiries or questions about Edward Thornton, including his experience, qualifications, books, and Alexa app.',
     guidance: [
       'Ask what the person in the role would be responsible for. If the caller already gave that information, ask which requirement matters most or immediately show a matching case when the priority is clear.',
       'Connect a real design decision to the requirement. For example, discuss the working queue before transfer for Amazon Connect, screened acceptance and recovery for voice automation, or separating raw data from the serving index for data engineering.',
