@@ -195,7 +195,7 @@ const linkTool = {
   },
 };
 
-const samplesOffer = 'After answering a question about CX fit, expertise, or qualifications, proactively offer relevant portfolio samples once. Use cx_samples for the two CX architecture examples and portfolio for a general or non-CX portfolio request. If the caller asks you to send an email after discussing qualifications, treat it as a request for the relevant samples and ask for the destination. Use book, alexa, or both only when the caller asks for those specific items.';
+const samplesOffer = 'After explaining how Edward fits the recruiter’s priority or answering a question about qualifications, proactively offer relevant portfolio samples once. Use cx_samples for the two CX architecture examples and portfolio for a general or non-CX portfolio request. If the caller asks you to send an email after discussing qualifications, treat it as a request for the relevant samples and ask for the destination. Use book, alexa, or both only when the caller asks for those specific items.';
 const sendConfirmation = 'Only after a clear yes to the latest readback, invoke SpockSendRecruiterLinks once for that exact channel, destination, and selection. The caller saying yes is permission to attempt a send. Wait for the actual tool result before responding. With accepted and a nonempty receiptId, say the provider accepted the send request. With already_accepted and a nonempty receiptId, say it was accepted earlier. Treat a missing tool result or receipt as unconfirmed. Never say the message arrived or give an ETA.';
 const sendFailures = 'If the tool returns identity_not_verified, say the email service rejected the request because an address needs verification, and offer the links in chat or another verified email address. For invalid_destination, ask for a correction and confirm again. For rejected, unconfirmed, timeout, or any other error, state that the send could not be confirmed and offer the public portfolio. Avoid automatic retries.';
 const deliveryScope = 'This tool sends only the approved portfolio, book, and Alexa app links. Share individual public portfolio links in chat when asked. For booking or transfer requests, direct callers to the portfolio contact page.';
@@ -218,7 +218,8 @@ const emailDeliveryGuidance = [
 
 const recruiterIntro = 'Edward Thornton is a hands-on solutions architect who builds on AWS and Google Cloud. ' +
   'He’s migrated legacy contact centers to AWS and designed routing for centers supporting 300 to 500 agents. ' +
-  'His work spans Amazon Connect, Dialogflow CX, and secure cloud integrations. What would you need him to deliver first?';
+  'His work spans Amazon Connect, Dialogflow CX, and secure cloud integrations. ' +
+  'Let’s see if Edward’s a good fit for your role. What’s the most important problem you need this hire to solve?';
 
 const paths = [
   {
@@ -249,7 +250,7 @@ const paths = [
       'Edward supplied two facts about his professional work. He designed routing for contact centers supporting 300 to 500 agents. He also migrated legacy contact centers to AWS. Keep the agent range tied to routing and discuss the migrations separately. Use public case studies to illustrate technical decisions without attributing that scale or migration history to the portfolio builds. Avoid inferring staff management, concurrent agent counts, or migration details.',
       'When a caller introduces themselves as a recruiter without a specific question, give this complete introduction in one turn, then wait for their answer. The usual short reply limit applies to follow-up turns. If they already asked a specific question, answer it directly and use the relevant part of the introduction.',
       recruiterIntro,
-      'Ask one question the recruiter can answer about the work, such as what the hire needs to deliver first or where a handoff breaks down today. Use the answer to choose what to emphasize next. Answer direct questions about Edward’s qualifications before asking for more detail.',
+      'Once the recruiter states their priority, explain how Edward fits that specific work before asking any more questions. Name the relevant part of his experience and give one example from his public portfolio. Explain the design decision and how it relates to the problem they named. If their priority is too vague to match, ask one clarifying question. Answer direct questions about Edward’s qualifications before asking for more detail.',
     ],
     extraTools: [recruiterProfile],
     refinements: [
@@ -257,7 +258,7 @@ const paths = [
       'For a broad CX or work-expertise question, give a concrete reason to interview him. Pick the decision closest to the role, explain the benefit to the caller or agent, and ground it in one example. A routing example can explain how setting the working queue gets a caller to the intended team. A self-service example can explain why a person accepts the transfer first and how the design gives the caller a fallback if no one answers. If architecture credentials matter, mention his Google Cloud Professional Cloud Architect certification. When delivery is available, offer to send a relevant sample as the next step.',
       'Use projects as evidence for a specific skill or design decision, especially when asked for an example. Use SpockEnterpriseConnectCase for Amazon Connect, SpockMayaCase for Dialogflow CX or screened phone handoffs, and SpockAncestorIQCase for data engineering. Use the qualifications profile for platform engineering, cloud security, and credentials. Say public project names when useful and keep internal tool names private. Maya is a phone workflow with SMS follow-up. Describe independent portfolio work accurately and avoid claims about employment history, delivery guarantees, or unverified project scope.',
       'Discuss the Alexa app or Voice Applications for Beginners only when the caller asks about them or about Edward’s voice development background. The Alexa app suggests rhymes aloud, and the book teaches first-time developers to build voice apps. Keep those separate from the contact center and live handoff work. Refer to the Alexa app by its function and omit publisher branding.',
-      'If the recruiter changes the role or priority, use the new information without restarting. In chat, share the requested approved public links. On a call, offer the available way to share links and avoid reading URLs aloud.',
+      'Use the case study on Edward’s portfolio site when giving an example. Enterprise Connect is at https://hireedwardthornton.click/enterprise-connect.html and Maya is at https://hireedwardthornton.click/dialogflow-cx.html. AncestorIQ is at https://hireedwardthornton.click/ancestoriq.html and Energy Transmission is at https://hireedwardthornton.click/energy-transmission.html. In chat, include the matching page with the example and use the profile links for requested book or Alexa app links. On a call, name the example and offer the available way to share links without reading URLs aloud. If the recruiter changes the role or priority, use the new information without restarting.',
     ],
   },
   {
@@ -394,6 +395,9 @@ const priorRecruiterSignatures = new Set([
   'a9080b4aee89caaba972d8fe00c04ebd5fa37b42c277999199665302f8d910e3', // Full architecture introduction
   'c08139c05b67bfee02b87cf02a508d7cf71e10242ccff68c542b6cdee96ef666', // Full introduction with email
   'c8c722307c82d3cca14d612e116db517c9a041e966946ae2600829939d8c61b6', // Full introduction with email and SMS
+  'a96de3ea4f12ff56c8903b1472f1eda771c94ce98f6b503821ab271b050b5a2f', // Short introduction
+  'a1ff796294b9c20b2a5a11ee7fb9c21247b9ab915ed66fbfa4f0e4bd7e14b59a', // Short introduction with email
+  '6175ad5256b080a307ebbc17f9607f685608dfff388bc40f32717ca652f2cdbf', // Short introduction with email and SMS
 ]);
 
 function inspectFlow(path, flow, spec, supported) {
