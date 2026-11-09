@@ -10,6 +10,8 @@ Spock is a voice-first portfolio experience built with Amazon Connect and Agenti
 | Recruiter | Asks what the architect needs to own and leads with Edward’s contact center architecture, conversational AI, cloud integration, and credentials. It offers relevant portfolio samples by email or text when delivery is enabled. |
 | Live demo | Leads with a short choice of examples and follows the caller’s questions. A caller can switch topics or turn the walkthrough into a conversation about a real need. |
 
+If the first reply is a side question or the welcome flow cannot match it, Spock responds conversationally. It can answer a question about the portfolio or the technology, handle small talk, and route the caller once their purpose is clear. Side questions during a journey can be answered before returning to the caller’s goal.
+
 Each path can call three read-only Designer data requests. They contain public project facts and limits on what Spock can claim about each build.
 
 | Case study | Example evidence |
@@ -26,7 +28,7 @@ The conversation installer built all three caller paths and loaded the portfolio
 
 ## Install the conversations
 
-Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **AWS Agentic Spock** app in Oregon. The installer expects **SpockWelcome** as the welcome flow and the three original caller paths attached.
+Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **AWS Agentic Spock** app in Oregon. The installer expects **SpockWelcome** as the welcome flow, **SpockClarify** in the workspace, and the three original caller paths attached. The key needs application write access to assign the Unknown flow on the first run.
 
 1. Use the existing `.spock.env` in the repo folder. If you’re setting up a fresh clone, create it with your own Designer IDs. Git ignores this file.
 
@@ -47,14 +49,15 @@ Use Node.js 20 or newer, npm, and a scoped Designer API key for the existing **A
    bash spock-conversations.sh
    ```
 
-3. Wait for `READY FOR DESIGNER TEST`, then open the app’s **Test** tab. This installer uses the Designer SDK to update the three caller paths and build the app for testing.
+3. Wait for `READY FOR DESIGNER TEST`, then open the app’s **Test** tab. The installer updates the caller journeys, routes Unknown replies to **SpockClarify**, and builds the app for testing.
 
 ## Try these conversations
 
 | Start with | Follow up with | What to verify |
 | --- | --- | --- |
 | “I’m a potential client. We miss calls after hours, and following up with leads takes too long.” | “Actually, most of our inquiries come through the website. We still want customers to reach a live person when it’s urgent.” | Spock pivots to website chat, explains how leads get logged and followed up, and describes the urgent handoff and fallback. It asks one question and relates Maya’s phone workflow where relevant. |
-| “I’m a recruiter.” | “What about CX?” | Spock opens with a concrete example of Edward’s architecture and implementation work, asks what the hire needs to deliver, and offers relevant portfolio samples when delivery is enabled. |
+| “Is Edward a loser?” | “I’m asking if he’s dumb.” Then “What’s he built?” and “I’m hiring for a contact center migration.” | Spock stays composed, pivots to Edward’s work, and switches to the recruiter journey when the caller states their hiring need. |
+| “I’m a recruiter.” | “What does CX mean?” Then “We’re migrating a legacy call center to AWS.” | Spock gives the recruiter intro, answers the side question, then matches the hiring priority to Edward’s migration experience and an example from his portfolio. |
 | “What about his work expertise?” | “Yes, email me the portfolio samples.” | Spock leads with skills and credentials, asks for the destination, reads it back, and waits for confirmation before calling `SpockSendRecruiterLinks`. Test a corrected address and a declined confirmation as well. |
 | “Can you send the book and Alexa app links?” | Choose an enabled channel and confirm a test destination. | Spock sends the requested book and app links. Check the Debugger for provider acceptance with a receipt ID, then verify actual receipt in your inbox or on your phone. |
 | “I’m hiring someone to modernize our Amazon Connect setup.” | “Actually, the role is mostly data engineering.” | Spock shifts from Enterprise Connect to AncestorIQ and explains a design choice from the new example. |
