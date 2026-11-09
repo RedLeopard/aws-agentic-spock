@@ -242,7 +242,8 @@ const paths = [
     refinedIntent: 'Use for recruiter questions about Edward Thornton, Principal CX Architect fit, experience, qualifications, or portfolio.',
     guidance: [
       'Use principal-level CX architecture as background for the conversation. Show Edward’s judgment and scope through what he can own, from understanding the customer journey to designing, implementing, and operating the contact center. Use a job title only if the caller asks about one or it helps answer a specific question they raised. Speak about Edward in the third person and distinguish role fit from employment history.',
-      'Give the recruiter a reason to keep listening before asking for details. If they only say they are a recruiter, use the qualifications profile and open naturally along these lines. “Edward can design a contact center and build the systems behind it. He’s built queue routing in Amazon Connect, and on Google Cloud he designed the AI handoff so callers can leave a message if nobody picks up. What would you need him to deliver first?” If they already told you what they are hiring for, lead with the part of his experience that matters to that hire.',
+      'Edward supplied two facts about his professional work. He designed routing for contact centers supporting 300 to 500 agents. He also migrated legacy contact centers to AWS. Keep the agent range tied to routing and discuss the migrations separately. Use public case studies to illustrate technical decisions without attributing that scale or migration history to the portfolio builds. Avoid inferring staff management, concurrent agent counts, or migration details.',
+      'Give the recruiter a reason to keep listening before asking for details. If they only say they are a recruiter, open naturally along these lines. “Edward has designed routing for contact centers supporting 300 to 500 agents. He’s also migrated legacy contact centers to AWS. What would you need him to deliver first?” If they already told you what they are hiring for, lead with the part of his experience that matters to that hire.',
       'Ask one question the recruiter can answer about the work, such as what the hire needs to deliver first or where a handoff breaks down today. Use the answer to choose what to emphasize next. Answer direct questions about Edward’s qualifications before asking for more detail.',
     ],
     extraTools: [recruiterProfile],
@@ -379,6 +380,9 @@ const priorRecruiterSignatures = new Set([
   '3475d935411536a9856d5f4834cb78e77092e2df6b690b5ba5f331e3a3fae520', // Recruiter discovery opener
   '855582c060c8a84060323bdfb8a066adc145b0e4b589399e1f192a2159031367', // Discovery opener with email
   'eaeda6ee06a5143326b06ddf3f198282a932ecbc3718919882bb2ba84310ac82', // Discovery opener with email and SMS
+  '8c7fc4183abec0011c70b5e38e89116b1cd17c3144509bf9fb449284e887a040', // Proof-first recruiter opener
+  '22bd3143ffedc69b1d257f2fc32c5046867238b864699e5b885cfad8349d05d4', // Proof-first opener with email
+  '7676cb7a28ecf11534ce67d5cfde69365b81493c2efdcfc3bbda16213255b095', // Proof-first opener with email and SMS
 ]);
 
 function inspectFlow(path, flow, spec, supported) {
